@@ -1,8 +1,17 @@
-# CLAUDE.md — PokeTokenBar for Omarchy
+# Desenvolvimento — OmaPkDex
 
 Plugin Quickshell para o bar do Omarchy: um Pokémon que choca e evolui conforme
-o uso de tokens de IA. Leia o `README.md` para o funcionamento; este arquivo é
-sobre como mexer no código sem quebrá-lo.
+o uso de tokens de IA. Leia o `README.md` na raiz para o funcionamento; este
+arquivo é sobre como mexer no código sem quebrá-lo.
+
+**Não renomeie este arquivo para `CLAUDE.md` nem `AGENTS.md`.** A árvore inteira
+do repositório é instalada como payload do plugin em
+`~/.config/omarchy/plugins/<id>/`, e esses dois nomes são carregados
+automaticamente como instruções por agentes de código que rodem naquele
+diretório ou acima dele. Um arquivo de instruções escrito pelo repositório
+dentro do payload instalado é superfície de injeção, e o marketplace do
+Omarchy bloqueia a revisão de segurança por causa disso. Notas de
+desenvolvimento aqui precisam de um nome que nenhum agente carregue sozinho.
 
 ## A armadilha que mais custa tempo aqui
 

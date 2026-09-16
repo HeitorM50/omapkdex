@@ -213,7 +213,7 @@ de tela mostrou.
 
 A separação virou `currentSprite`/`displayName` (o bicho real, para o painel) e
 `barSprite`/`barName` (o fixado, só para o bar), com o porquê comentado no
-código e no `CLAUDE.md`.
+código e no `desenvolvimento.md`.
 
 **A lição:** quando uma feature faz duas superfícies discordarem sobre o mesmo
 dado, a resposta é duas propriedades com nomes honestos, não um condicional
@@ -327,8 +327,9 @@ Resultado: com o bônus de linha repetida ativo, a UI pedia 75M quando o helper
 cobrava 37,5M. O Pokémon evoluía com a barra pela metade, e o "faltam X tokens"
 errava por 37 milhões.
 
-O `CLAUDE.md` já dizia que o `Balance.js` é a leitura do que o helper escreve. O
-invariante estava escrito e eu o quebrei ao adicionar um parâmetro só de um lado.
+O `desenvolvimento.md` já dizia que o `Balance.js` é a leitura do que o helper
+escreve. O invariante estava escrito e eu o quebrei ao adicionar um parâmetro só
+de um lado.
 
 **A lição:** quando a mesma fórmula existe em duas linguagens por necessidade
 (uma cobra, a outra exibe), a mudança de assinatura em uma é mudança na outra. O

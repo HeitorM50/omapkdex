@@ -1697,7 +1697,7 @@ def _with_state_lock(fn, after=None):
 
     `after` roda TAMBÉM dentro do lock, depois da escrita do estado. É onde
     entram a escrita da coleção e a chocagem — elas rodavam fora do lock, que é
-    exatamente o que o invariante do CLAUDE.md proíbe.
+    exatamente o que o invariante de docs/desenvolvimento.md proíbe.
     """
     os.makedirs(state_dir(), exist_ok=True)
     with open(lock_path(), "w") as lock:
