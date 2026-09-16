@@ -263,5 +263,29 @@ eq("e não sobra temporário",
    [f for f in os.listdir(_dir) if '.tmp.' in f], [])
 shutil.rmtree(_dir, ignore_errors=True)
 
+# ---- O default do main() -------------------------------------------------
+#
+# `main()` tratava a ausência de argumento como "hatch". Rodar o helper na mão
+# só para ver se ele responde — `./bin/omapkdex-sync` — despejava o companion
+# ativo e chocava outro no lugar, porque cmd_hatch não olha state["hatched"]:
+# o guard de "só choca quando o ovo está pronto" vive no QML. Perda de dado
+# silenciosa, disparada pelo comando mais inofensivo que existe.
+#
+# O teste é da ROTA, não da chocagem: substituir cmd_hatch por uma sentinela
+# prova a decisão do main() sem depender de rede.
+ps_main = load_helper()
+chamadas = []
+ps_main.COMMANDS = dict(ps_main.COMMANDS)
+ps_main.COMMANDS["hatch"] = lambda argv: (chamadas.append(argv), 0)[1]
+
+eq("sem argumento sai 2", ps_main.main([]), 2)
+eq("e não chama o hatch", chamadas, [])
+
+eq("hatch explícito continua chamando", ps_main.main(["hatch"]), 0)
+eq("com os argumentos certos", chamadas, [[]])
+
+eq("subcomando desconhecido continua saindo 2", ps_main.main(["banana"]), 2)
+eq("sem chamar nada", chamadas, [[]])
+
 print(f"\n{fails} FALHA(S)" if fails else "\nTodos os testes passaram")
 raise SystemExit(1 if fails else 0)

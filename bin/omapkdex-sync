@@ -1905,10 +1905,19 @@ COMMANDS = {"hatch": cmd_hatch, "sprites": cmd_sprites,
 
 
 def main(argv: list[str]) -> int:
-    command = argv[0] if argv else "hatch"
+    # Ausência de subcomando NÃO é "hatch". O default antigo fazia
+    # `./bin/omapkdex-sync` — o comando que qualquer pessoa roda só para ver se
+    # o helper responde — despejar o companion ativo e chocar outro no lugar,
+    # porque cmd_hatch choca incondicionalmente: o guard de "só choca quando o
+    # ovo está pronto" vive no QML, não aqui. Perda de dado silenciosa disparada
+    # pelo comando mais inofensivo que existe. Imprimir o uso é o que se espera.
+    command = argv[0] if argv else ""
     handler = COMMANDS.get(command)
     if not handler:
-        log(f"subcomando desconhecido: {command}")
+        if command:
+            log(f"subcomando desconhecido: {command}")
+        else:
+            log("uso: omapkdex-sync <subcomando> [argumentos]")
         log(f"disponíveis: {', '.join(sorted(COMMANDS))}")
         return 2
     try:
