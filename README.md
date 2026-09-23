@@ -399,7 +399,7 @@ omarchy bar set io.github.heitorm50.omapkdex showTokens false --json
 | `shopDifficulty` | `1.0` | Multiplies shop prices, independent of growth |
 | `spriteSize` | `22` | Sprite height in the bar, in px |
 | `showTokens` | `true` | Show today's tokens next to the sprite |
-| `showLimitPercent` | `false` | Show the tightest rate-limit percentage |
+| `showLimitPercent` | `false` | Show the active short-window rate-limit percentage |
 | `seedFromExisting` | `false` | Count usage already recorded |
 | `representativeSpeciesId` | `0` | Species pinned to the bar; 0 follows the companion |
 | `pollSeconds` | `60` | Safety net; records are already watched by event |
@@ -475,9 +475,10 @@ tests/test_details.py      # species data: normalization, cache, REST fallback
 tests/test_dex.mjs         # the Pokédex projection, ownership, the 2× bonus
 tests/test_profile.mjs     # IVs, gender, ability, level, stats, moves
 tests/test_shop.mjs        # shop list, bag, mood, bar tooltip
+tests/test_limits.mjs      # short-window selection for the compact bar
 ```
 
-**570 assertions**, none of which touch the network or your real state.
+**576 assertions**, none of which touch the network or your real state.
 
 <details>
 <summary><b>The ones that matter most</b></summary>

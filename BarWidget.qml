@@ -161,12 +161,14 @@ BarWidget {
     return total
   }
 
-  // O limite de janela mais apertado entre todos os agentes, para o texto
-  // opcional no bar. Vem direto de limits[].percent do record.
+  // A janela mais curta de cada agente alimenta o estado compacto. Assim a
+  // sessão de 5 horas do Claude não é substituída pela cota semanal apenas
+  // porque a porcentagem semanal está maior. O painel detalhado continua livre
+  // para mostrar o conjunto completo de limites.
   readonly property var worstLimit: {
     var worst = null
     for (var i = 0; i < agentIds.length; i++) {
-      var limit = Balance.tightestLimit(records[agentIds[i]])
+      var limit = Balance.shortestLimit(records[agentIds[i]])
       if (limit && (!worst || limit.percent > worst.percent)) worst = limit
     }
     return worst

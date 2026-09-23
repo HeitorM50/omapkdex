@@ -73,7 +73,7 @@
       {
         "key": "showLimitPercent",
         "type": "boolean",
-        "label": "Show the tightest rate-limit percentage",
+        "label": "Show the active short-window percentage",
         "defaultValue": false
       },
       {

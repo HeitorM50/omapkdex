@@ -378,3 +378,37 @@ function tightestLimit(record) {
   }
   return worst
 }
+
+// The compact bar represents the limit the user is consuming right now, not
+// whichever long-term allowance happens to have the largest percentage. Keep
+// tightestLimit() for the detailed panel, and prefer the shortest recognized
+// window here (for example Claude's 5-hour session before its weekly quota).
+function limitDurationMinutes(limit) {
+  if (!limit || typeof limit !== "object") return -1
+  var label = String(limit.label || limit.title || "").toLowerCase()
+  var match = label.match(/\b(\d+)\s*[- ]?h(?:our)?\b/)
+  if (match) return Number(match[1]) * 60
+  match = label.match(/\b(\d+)\s*[- ]?day\b/)
+  if (match) return Number(match[1]) * 1440
+  if (label.indexOf("weekly") >= 0 || label.indexOf("week") >= 0) return 10080
+  if (label.indexOf("monthly") >= 0 || label.indexOf("month") >= 0) return 43200
+  return -1
+}
+
+function shortestLimit(record) {
+  if (!record || !Array.isArray(record.limits)) return null
+  var fallback = null
+  var shortest = null
+  var shortestMinutes = -1
+  for (var i = 0; i < record.limits.length; i++) {
+    var limit = record.limits[i]
+    if (!limit || typeof limit.percent !== "number") continue
+    if (!fallback) fallback = limit
+    var minutes = limitDurationMinutes(limit)
+    if (minutes >= 0 && (shortestMinutes < 0 || minutes < shortestMinutes)) {
+      shortest = limit
+      shortestMinutes = minutes
+    }
+  }
+  return shortest || fallback
+}
