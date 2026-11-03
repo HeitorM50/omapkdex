@@ -8,6 +8,8 @@ cacheado para sempre (são dados imutáveis).
 Sem rede: as duas buscas são substituídas por funções que devolvem payloads
 fixos, ou que levantam — é a única forma de exercitar o fallback e a falha.
 """
+from pathlib import Path
+
 import importlib.machinery
 import importlib.util
 import json
@@ -16,8 +18,7 @@ import shutil
 import tempfile
 import urllib.error
 
-PLUGIN = os.path.expanduser(
-    '~/.config/omarchy/plugins/io.github.heitorm50.omapkdex/bin/omapkdex-sync')
+PLUGIN = str(Path(__file__).resolve().parents[1] / 'bin/omapkdex-sync')
 
 fails = 0
 

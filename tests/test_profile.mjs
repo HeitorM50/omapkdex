@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 // Perfil do indivíduo: IVs, gênero, habilidade, nível, stats e golpes.
 //
 // A decisão que estes testes travam: NADA disso é persistido. Tudo é sorteado
@@ -10,10 +11,10 @@
 // o mesmo indivíduo. Se isso quebrar, os IVs do bicho de alguém mudam sozinhos.
 
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
-import { tmpdir, homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const PLUGIN = join(homedir(), '.config/omarchy/plugins/io.github.heitorm50.omapkdex')
+const PLUGIN = fileURLToPath(new URL('../', import.meta.url))
 const dir = mkdtempSync(join(tmpdir(), 'ptb-prof-'))
 const shim = join(dir, 'profile.mjs')
 writeFileSync(shim,

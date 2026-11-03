@@ -174,6 +174,8 @@ The individuals rather than the species — every creature you raised, newest fi
 
 The tokens you already burned are currency: your wallet is the lifetime total minus what you have spent.
 
+The Shop sells **Poor (50M), Fancy (200M) and Legendary (500M) packages**. Each contains one reward and shows its rarity; higher tiers improve rare-item odds. Legendary excludes Common items. Eggs stay in the Bag; reserve one for the next natural hatch without interrupting your current Pokémon.
+
 Filling a rate-limit window pays **Rare Candy** — the moment you hit the ceiling becomes the moment your creature grows.
 
 </td>
@@ -185,7 +187,7 @@ Filling a rate-limit window pays **Rare Candy** — the moment you hit the ceili
 
 ### ⚙️ Settings
 
-Growth difficulty and shop prices, **0.1× to 2.0×**, independently — showing what each costs in real tokens rather than just a multiplier. "150M to graduate" says something that "0.3×" does not.
+Growth difficulty, **0.1× to 2.0×** — showing what each costs in real tokens rather than just a multiplier. "150M to graduate" says something that "0.3×" does not.
 
 Changing growth **never costs you progress**: the fraction of the current stage is preserved.
 
@@ -385,7 +387,7 @@ progress — only the bar stops following, and a ★ on the sprite says so.
 
 ## Settings
 
-Growth difficulty and shop prices have sliders in the **⚙ Settings** tab. The
+Growth difficulty has a slider in the **⚙ Settings** tab. Packages cost 50M, 200M or 500M, independently of growth settings. The
 full set lives in `~/.config/omarchy/shell.json`, in the widget's entry:
 
 ```bash
@@ -396,7 +398,7 @@ omarchy bar set io.github.heitorm50.omapkdex showTokens false --json
 | Key | Default | What it does |
 |---|---|---|
 | `difficulty` | `0.3` | Multiplies growth thresholds, 0.1–2.0. Changing it rescales banked progress, so nothing evolves for free |
-| `shopDifficulty` | `1.0` | Multiplies shop prices, independent of growth |
+| `shopDifficulty` (legacy) | `1.0` | Only affects legacy direct CLI purchases; package prices are fixed at 50M/200M/500M |
 | `spriteSize` | `22` | Sprite height in the bar, in px |
 | `showTokens` | `true` | Show today's tokens next to the sprite |
 | `showLimitPercent` | `false` | Show the tightest rate-limit percentage |
@@ -466,6 +468,8 @@ down.
 ## Tests
 
 ```bash
+python3 tests/run.py       # all suites, from any checkout
+
 tests/test_collection.py   # collection and the shiny roll
 tests/test_absorb.py       # accumulation and integration, against real records
 tests/test_economy.py      # wallet, prices, candy, eggs, burn rate, rescaling
@@ -477,7 +481,7 @@ tests/test_profile.mjs     # IVs, gender, ability, level, stats, moves
 tests/test_shop.mjs        # shop list, bag, mood, bar tooltip
 ```
 
-**570 assertions**, none of which touch the network or your real state.
+All suites run offline against synthetic usage fixtures and temporary state; no installed plugin or personal save is required.
 
 <details>
 <summary><b>The ones that matter most</b></summary>
@@ -547,3 +551,18 @@ page are loaded from PokéAPI's own repository.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+Local pool update: **Turbo Incubator** (Uncommon) halves the next egg's hatch
+cost; **Lucky Clover** (Rare) doubles shiny chance for one hatch and
+combines with Shiny Charm. Reserve them from the Bag. See
+[the pack rules](docs/surprise-packs.md) for consumption timing and odds.
+
+The rarest pack reward is now **Legendary Egg**, a **Mythic** item. Reserve it
+from the Bag for a guaranteed Legendary species on the next natural hatch.
+Lucky Clover is Rare and more common than the permanent Legendary Shiny Charm.
+
+Each package now has an independent **RNGesus Meter**: Poor fills at **2B**,
+Fancy at **3B**, Legendary at **4B** spent without a Legendary/Mythic item.
+Once full, the **following opening of that package** guarantees one of those
+rarities. Any Legendary/Mythic item resets its meter. Progress persists, and
+spending starts counting from this update. See [the meter rules](docs/surprise-packs.md).

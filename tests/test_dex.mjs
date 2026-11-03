@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 // Projeção do Pokédex sobre o catch log.
 //
 // O dex não é um arquivo: é derivado das entradas da coleção. Estes testes
@@ -8,9 +9,8 @@
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 
-const PLUGIN = join(homedir(), '.config/omarchy/plugins/io.github.heitorm50.omapkdex')
+const PLUGIN = fileURLToPath(new URL('../', import.meta.url))
 
 const dir = mkdtempSync(join(tmpdir(), 'ptb-dex-'))
 const shim = join(dir, 'collection.mjs')

@@ -7,6 +7,8 @@ O teste que mais importa é o primeiro: usar uma candy não pode aumentar a
 carteira. A carteira é lifetimeTokens − spentTokens, então somar o XP da candy
 ao lifetime faria de cada candy uma máquina de dinheiro.
 """
+from pathlib import Path
+
 import importlib.machinery
 import importlib.util
 import json
@@ -14,9 +16,8 @@ import os
 import shutil
 import tempfile
 
-PLUGIN = os.path.expanduser(
-    '~/.config/omarchy/plugins/io.github.heitorm50.omapkdex/bin/omapkdex-sync')
-REAL_USAGE = os.path.expanduser('~/.local/state/omarchy/agents/usage')
+PLUGIN = str(Path(__file__).resolve().parents[1] / 'bin/omapkdex-sync')
+REAL_USAGE = str(Path(__file__).resolve().parent / 'fixtures/usage')
 MODULE = 'io.github.heitorm50.omapkdex'
 
 fails = 0
@@ -40,7 +41,7 @@ def load_helper():
 
 
 class Sandbox:
-    """XDG_STATE_HOME temporário com cópias dos records reais."""
+    """XDG_STATE_HOME temporário com records sintéticos."""
 
     def __enter__(self):
         self.dir = tempfile.mkdtemp(prefix='ptb-eco-')
@@ -149,7 +150,7 @@ eq("candy semanal", ps_mod.CANDY_WEEKLY_GRANT, 5)
 eq("ovo simples", ps_mod.egg_price(None), 1_000_000_000)
 eq("ovo incomum = 2.5x", ps_mod.egg_price("uncommon"), 2_500_000_000)
 eq("ovo raro = 4x", ps_mod.egg_price("rare"), 4_000_000_000)
-eq("não se vende ovo lendário", ps_mod.EGG_TIERS, [None, "uncommon", "rare"])
+eq("ovos incluem o grau lendário", ps_mod.EGG_TIERS, [None, "uncommon", "rare", "legendary"])
 
 print("\n--- a dificuldade da loja é independente da de crescimento ---")
 eq("preço dobra em 2.0", ps_mod.shop_price("rareCandy", 2.0), 1_000_000_000)

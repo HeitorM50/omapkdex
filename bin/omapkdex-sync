@@ -8,8 +8,10 @@ bin/gcal-sync: credencial e rede ficam fora do processo do shell.
 Subcomandos:
   absorb <dif>     acumula os tokens novos dos records e avança a progressão
   details <id>     busca e cacheia os dados de espécie do perfil do indivíduo
-  buy <item> <dif> [grau]   compra na loja (rareCandy|mint|shinyCharm|egg)
-  use <item> <dif>          usa um item da bag (rareCandy|mint)
+  buy <poorPackage|fancyPackage|legendaryPackage>   pacote de 50M/200M/500M
+  buy surprisePack        alias legado do Poor Package (50M)
+  buy <item> <dif> [grau]   compra direta legada (compatibilidade)
+  use <item> <dif>          usa rareCandy/mint ou reserva egg:<grau>
   hatch            sorteia uma espécie base, resolve a linha e baixa os sprites
   sprites <ids>    (re)baixa os sprites dessas espécies
   index            reconstrói o índice de candidatos e sai
@@ -284,8 +286,8 @@ def pick_species(entries: list[dict], *, tier: str | None = None,
                  collection: dict | None = None) -> dict | None:
     """Sorteia uma espécie base. `tier` é um piso de raridade garantido.
 
-    O piso é um teto de capture_rate (meets_tier), fonte única em
-    RARITY_CEILINGS. Devolve None quando o piso não tem candidato: o original
+    meets_tier enforces the capture-rate ceiling or the Legendary flag.
+    Devolve None quando o piso não tem candidato: o original
     nunca cai de volta para o pool inteiro, porque isso entregaria menos do que
     a pessoa pagou — ela mantém a garantia e tenta de novo.
     """
@@ -615,7 +617,7 @@ def cmd_absorb(argv: list[str]) -> int:
             state["lifetimeTokens"] += gained
 
             if not state["hatched"]:
-                needed = hatch_threshold(difficulty)
+                needed = effective_hatch_threshold(state, difficulty)
                 if state["tokensIntoStage"] + gained < needed:
                     state["tokensIntoStage"] += gained
                 else:
@@ -623,6 +625,8 @@ def cmd_absorb(argv: list[str]) -> int:
                     # crescimento do filhote, como no original.
                     state["tokensIntoStage"] = state["tokensIntoStage"] + gained - needed
                     state["hatched"] = True
+                    if companion is not None:
+                        consume_hatch_items(state)
                     state["stage"] = 0
                     if companion is None:
                         hatch_requested = True
@@ -782,11 +786,8 @@ SHINY_CHARM_RATE = 48
 # progresso acumulado é o custo real, e é o que impede farmar re-rolls.
 FRESH_EGG_PRICE = 1_000_000_000
 
-# Graus vendidos. Sem ovo exclusivo de lendário: o piso é um teto de
-# capture_rate, e ser lendário vem de is_legendary, que o índice não carrega.
-# Como todo lendário tem capture_rate <= 45, ele entra naturalmente nos dois
-# graus pagos.
-EGG_TIERS = [None, "uncommon", "rare"]
+# The legendary tier checks the species flag, not its capture rate.
+EGG_TIERS = [None, "uncommon", "rare", "legendary"]
 
 # As 25 natures da série principal. Aqui são só rótulo — sem stats, porque o
 # bloco de individualidade ficou fora de escopo. Existem para o Mint ter o que
@@ -817,6 +818,8 @@ BASE_PRICES = {
     "rareCandy": RARE_CANDY_PRICE,
     "mint": MINT_PRICE,
     "shinyCharm": SHINY_CHARM_PRICE,
+    "turboIncubator": 750_000_000,
+    "luckyClover": 6_000_000_000,
 }
 
 PASSIVE_ITEMS = {"shinyCharm"}
@@ -836,6 +839,106 @@ def shop_price(entry: str, shop_difficulty: float) -> int:
     return max(0, round(base * clamp_difficulty(shop_difficulty)))
 
 
+PACK_PRICE = 50_000_000  # Legacy surprisePack alias is the Poor Package.
+PACKAGES = {
+    "poorPackage": {"price": PACK_PRICE, "power": 1.0, "excludeCommon": False, "meterLimit": 2_000_000_000},
+    "fancyPackage": {"price": 200_000_000, "power": 0.5, "excludeCommon": False, "meterLimit": 3_000_000_000},
+    "legendaryPackage": {"price": 500_000_000, "power": 0.25, "excludeCommon": True, "meterLimit": 4_000_000_000},
+}
+PACK_REWARDS = ("mint", "rareCandy", "turboIncubator", "egg:", "egg:uncommon", "luckyClover", "egg:rare", "shinyCharm", "egg:legendary")
+
+
+def pack_reference_price(key: str) -> int:
+    # Swap the two rewards' weights without changing legacy direct CLI prices.
+    overrides = {"luckyClover": 3_000_000_000, "shinyCharm": 6_000_000_000}
+    return overrides[key] if key in overrides else shop_price(key, 1.0)
+
+
+def item_rarity(key: str) -> str:
+    if key == "egg:legendary":
+        return "mythical"
+    if key == "luckyClover":
+        return "rare"
+    price = shop_price(key, 1.0)
+    if price < RARE_CANDY_PRICE:
+        return "common"
+    if price < FRESH_EGG_PRICE:
+        return "uncommon"
+    if price < SHINY_CHARM_PRICE:
+        return "rare"
+    return "legendary"
+
+
+def rngesus_meter(state: dict, package: str) -> dict:
+    limit = PACKAGES[package]["meterLimit"]
+    meters = state.get("rngesusMeters")
+    raw = meters.get(package, 0) if isinstance(meters, dict) else 0
+    tokens = min(limit, max(0, raw)) if type(raw) is int else 0
+    return {"tokens": tokens, "limit": limit,
+            "fraction": tokens / limit, "ready": tokens >= limit}
+
+
+def pack_pool(package: str = "poorPackage", rngesus_only: bool = False) -> tuple[list[str], list[float]]:
+    config = PACKAGES[package]
+    keys = [key for key in PACK_REWARDS
+            if (not config["excludeCommon"] or item_rarity(key) != "common")
+            and (not rngesus_only or item_rarity(key) in ("legendary", "mythical"))]
+    weights = [(MINT_PRICE / pack_reference_price(key)) ** config["power"] for key in keys]
+    return keys, weights
+
+
+def roll_pack(rng=None, package: str = "poorPackage", rngesus_only: bool = False) -> str:
+    rng = rng or random.SystemRandom()
+    keys, weights = pack_pool(package, rngesus_only=rngesus_only)
+    return rng.choices(keys, weights=weights, k=1)[0]
+
+
+def buy_pack(package: str = "poorPackage") -> int:
+    price = PACKAGES[package]["price"]
+    def apply(state):
+        if available_tokens(state) < price:
+            log(f"saldo insuficiente para {package}: {price}")
+            return False
+        meter = rngesus_meter(state, package)
+        guaranteed = meter["ready"]  # Check BEFORE charging this opening.
+        key = roll_pack(package=package, rngesus_only=guaranteed)
+        inventory = state.setdefault("inventory", {})
+        if key in PASSIVE_ITEMS:
+            if inventory.get(key):
+                inventory["shinyCharmDuplicates"] = int(inventory.get("shinyCharmDuplicates") or 0) + 1
+            inventory[key] = True
+        else:
+            inventory[key] = int(inventory.get(key) or 0) + 1
+        state["spentTokens"] = int(state.get("spentTokens") or 0) + price
+        meters = state.get("rngesusMeters")
+        if not isinstance(meters, dict):
+            meters = {}
+            state["rngesusMeters"] = meters
+        meters[package] = (0 if item_rarity(key) in ("legendary", "mythical")
+                           else min(meter["limit"], meter["tokens"] + price))
+        # Debit, meter, reward and receipt commit together under the absorb lock.
+        # UI animation never commits a purchase.
+        state["lastPack"] = {"id": uuid.uuid4().hex, "key": key,
+                             "rarity": item_rarity(key), "openedAt": int(time.time()),
+                             "package": package, "price": price,
+                             "rngesusGuaranteed": guaranteed}
+        return True
+
+    return 0 if _with_state_lock(apply) else 1
+
+
+def effective_hatch_threshold(state: dict, difficulty: float) -> int:
+    base = hatch_threshold(difficulty)
+    return max(1, round(base / 2)) if state.get("turboIncubatorActive") else base
+
+
+def consume_hatch_items(state: dict) -> None:
+    state.pop("turboIncubatorActive", None)
+    if state.pop("luckyCloverPending", False):
+        inventory = state.setdefault("inventory", {})
+        inventory["luckyClover"] = max(0, int(inventory.get("luckyClover") or 0) - 1)
+
+
 def available_tokens(state: dict) -> int:
     """A carteira: tudo o que já foi queimado, menos o que já foi gasto."""
     lifetime = state.get("lifetimeTokens") or 0
@@ -848,11 +951,11 @@ def shiny_denominator(inventory: dict) -> int:
 
 
 def meets_tier(entry: dict, tier: str | None) -> bool:
-    """O piso de raridade é um teto de capture_rate, fonte única em
-    RARITY_CEILINGS. Lendário passa em qualquer piso porque todo lendário tem
-    capture_rate <= 45."""
+    """Legendary requires its explicit species flag; lower tiers use capture_rate."""
     if tier is None:
         return True
+    if tier == "legendary":
+        return entry.get("isLegendary") is True
     ceiling = dict(RARITY_CEILINGS).get(tier)
     if ceiling is None:
         return False
@@ -912,6 +1015,8 @@ def advance_stages(state: dict, rarity: str, total_forms: int,
         state["graduations"] = int(state.get("graduations") or 0) + 1
         state["hatched"] = False
         state["stage"] = 0
+        if state.pop("turboIncubatorQueued", False):
+            state["turboIncubatorActive"] = True
         # O excedente é descartado de propósito: carregá-lo faria cascata no
         # caso que importa, em que `seed` solta mais de um bilhão de uma vez e
         # graduaria vários Pokémon em sequência contra uma linha que ainda nem
@@ -949,8 +1054,8 @@ def rescale_progress(state: dict, rarity: str, total_forms: int,
         antigo = phase_threshold(rarity, total_forms, stage, old, growth_multiplier)
         novo = phase_threshold(rarity, total_forms, stage, new, growth_multiplier)
     else:
-        antigo = hatch_threshold(old)
-        novo = hatch_threshold(new)
+        antigo = effective_hatch_threshold(state, old)
+        novo = effective_hatch_threshold(state, new)
 
     if antigo == novo or antigo <= 0:
         return
@@ -1320,6 +1425,14 @@ def cmd_hatch(argv: list[str]) -> int:
     if tier not in EGG_TIERS:
         tier = None
 
+    queued = state.get("queuedEgg")
+    if not argv and queued in PACK_REWARDS and queued.startswith("egg:"):
+        queued_tier = queued.partition(":")[2] or None
+        # Respect an existing purchased guarantee if it is stronger.
+        ranks = {None: 0, "uncommon": 1, "rare": 2, "legendary": 3}
+        if ranks.get(queued_tier, 0) > ranks.get(tier, 0):
+            tier = queued_tier
+
     collection = load_collection()
     entries = load_index()
     entry = pick_species(entries, tier=tier, collection=collection)
@@ -1331,7 +1444,12 @@ def cmd_hatch(argv: list[str]) -> int:
         log(f"nenhuma espécie atende o piso {tier!r}; a garantia continua valendo")
         return 1
 
-    shiny = roll_shiny(denominator=shiny_denominator(state.get("inventory")))
+    denominator = shiny_denominator(state.get("inventory"))
+    clover = bool(state.get("luckyCloverArmed")
+                  and int(state.get("inventory", {}).get("luckyClover") or 0) > 0)
+    if clover:
+        denominator = max(1, denominator // 2)
+    shiny = roll_shiny(denominator=denominator)
     line = hydrate_sprites(evolution_line(entry["id"]), shiny)
     now = int(time.time())
     rarity = rarity_for(entry)
@@ -1355,9 +1473,19 @@ def cmd_hatch(argv: list[str]) -> int:
     }
     write_json(companion_path(), companion)
 
+    # Reserve the rolled bonus until the egg actually hatches. Network failure
+    # before delivering the companion leaves both the item and its activation.
+    if clover:
+        state.pop("luckyCloverArmed", None)
+        state["luckyCloverPending"] = True
+        if state.get("hatched"):
+            consume_hatch_items(state)
+
     # O grau é consumido exatamente aqui, na chocagem que o honrou.
-    if state.get("eggTier") is not None:
+    if state.get("eggTier") is not None or (not argv and queued) or clover:
         state["eggTier"] = None
+        if not argv:
+            state.pop("queuedEgg", None)
         write_json(state_path(), state)
 
     # A entrada de catch log nasce junto com o companion: o Pokémon entra no
@@ -1368,7 +1496,7 @@ def cmd_hatch(argv: list[str]) -> int:
     nome = entry["name"].replace("-", " ").title()
     if shiny:
         notify("✨ Shiny!", f"A shiny {nome} hatched — that is 1 in "
-                           f"{shiny_denominator(state.get('inventory'))}.")
+                           f"{denominator}.")
     else:
         notify("Hatched!", f"{nome} ({rarity_for(entry)})")
 
@@ -1720,6 +1848,8 @@ def cmd_buy(argv: list[str]) -> int:
         log("uso: omapkdex-sync buy <item|egg> <shopDifficulty> [grau]")
         return 2
     what = argv[0]
+    if what == "surprisePack" or what in PACKAGES:
+        return buy_pack("poorPackage" if what == "surprisePack" else what)
     shop_difficulty = clamp_difficulty(argv[1] if len(argv) > 1 else DIFFICULTY_DEFAULT)
     tier = argv[2] if len(argv) > 2 else None
 
@@ -1811,6 +1941,31 @@ def cmd_use(argv: list[str]) -> int:
         return 2
     what = argv[0]
     difficulty = clamp_difficulty(argv[1] if len(argv) > 1 else DIFFICULTY_DEFAULT)
+
+    if what in ("turboIncubator", "luckyClover"):
+        flag = "turboIncubatorQueued" if what == "turboIncubator" else "luckyCloverArmed"
+        def reserve_booster(state):
+            inventory = state.setdefault("inventory", {})
+            blocked = state.get(flag) or (what == "luckyClover" and state.get("luckyCloverPending"))
+            if blocked or int(inventory.get(what) or 0) <= 0:
+                log("item indisponível ou já reservado")
+                return False
+            state[flag] = True
+            if what == "turboIncubator":
+                inventory[what] = int(inventory[what]) - 1
+            return True
+        return 0 if _with_state_lock(reserve_booster) else 1
+
+    if what in PACK_REWARDS and what.startswith("egg:"):
+        def queue_egg(state):
+            inventory = state.setdefault("inventory", {})
+            if state.get("queuedEgg") or int(inventory.get(what) or 0) <= 0:
+                log("sem ovo disponível ou já há um reservado para a próxima chocagem")
+                return False
+            inventory[what] = int(inventory[what]) - 1
+            state["queuedEgg"] = what
+            return True
+        return 0 if _with_state_lock(queue_egg) else 1
 
     if what not in ("rareCandy", "mint"):
         log(f"item não usável: {what}")

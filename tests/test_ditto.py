@@ -5,6 +5,8 @@
 se revela no lugar da primeira evolução. Enquanto disfarçado, o shiny fica
 escondido — é a parte fácil de errar.
 """
+from pathlib import Path
+
 import importlib.machinery
 import importlib.util
 import json
@@ -12,9 +14,8 @@ import os
 import shutil
 import tempfile
 
-PLUGIN = os.path.expanduser(
-    '~/.config/omarchy/plugins/io.github.heitorm50.omapkdex/bin/omapkdex-sync')
-REAL_USAGE = os.path.expanduser('~/.local/state/omarchy/agents/usage')
+PLUGIN = str(Path(__file__).resolve().parents[1] / 'bin/omapkdex-sync')
+REAL_USAGE = str(Path(__file__).resolve().parent / 'fixtures/usage')
 MODULE = 'io.github.heitorm50.omapkdex'
 
 fails = 0

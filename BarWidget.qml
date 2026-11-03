@@ -150,7 +150,7 @@ BarWidget {
   readonly property var progress: Balance.progress(rarity, totalForms, stage,
                                                    tokensIntoStage, difficulty,
                                                    growthBoost ? 2 : 1)
-  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty)
+  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty, progressState && progressState.turboIncubatorActive)
 
   readonly property real todayTokens: {
     var total = 0
@@ -266,8 +266,12 @@ BarWidget {
     hatchProc.running = true
   }
 
+  readonly property bool packBusy: buyProc.running
+  property string packError: ""
+
   function buy(key, tier) {
     if (buyProc.running) return
+    root.packError = ""
     var isEgg = String(key).indexOf("egg") === 0
     buyProc.key = isEgg ? "egg" : key
     buyProc.tier = isEgg ? (String(key).split(":")[1] || "") : ""
@@ -574,7 +578,10 @@ BarWidget {
     stdout: StdioCollector { waitForEnd: true }
     stderr: StdioCollector { waitForEnd: true }
     onExited: function (code) {
-      if (code !== 0) console.warn(root.moduleName, "compra recusada:", buyProc.key)
+      if (code !== 0) {
+        root.packError = "Purchase failed. Check your balance and try again."
+        console.warn(root.moduleName, "compra recusada:", buyProc.key)
+      }
       root.reloadFiles()
     }
   }

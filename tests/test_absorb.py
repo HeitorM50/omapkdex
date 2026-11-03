@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Testa cmd_absorb contra os records reais, num XDG_STATE_HOME temporário."""
+"""Testa cmd_absorb contra records sintéticos, num XDG_STATE_HOME temporário."""
+from pathlib import Path
+
 import importlib.machinery, importlib.util, json, os, shutil, tempfile
 
-PLUGIN = os.path.expanduser('~/.config/omarchy/plugins/io.github.heitorm50.omapkdex/bin/omapkdex-sync')
-REAL = os.path.expanduser('~/.local/state/omarchy/agents/usage')
+PLUGIN = str(Path(__file__).resolve().parents[1] / 'bin/omapkdex-sync')
+REAL = str(Path(__file__).resolve().parent / 'fixtures/usage')
 MODULE = 'io.github.heitorm50.omapkdex'
 
 fails = 0

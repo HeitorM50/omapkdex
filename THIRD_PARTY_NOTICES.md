@@ -61,3 +61,13 @@ This plugin reads the usage records written by the first-party `omarchy.agents`
 plugin, whose record format is documented at
 `/usr/share/omarchy/shell/plugins/agents/README.md`. It never writes to those
 records and never runs the collectors.
+
+## Surprise pack sprite
+
+`assets/parcel.png` is the pixel-art Parcel item sprite from
+[PokéAPI/sprites](https://github.com/PokeAPI/sprites/blob/master/sprites/items/parcel.png),
+downloaded 2026-11-03. Source:
+https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/parcel.png
+Pokémon artwork belongs to Nintendo / Creatures Inc. / GAME FREAK inc.;
+the plugin's MIT license does not grant rights to this artwork. The local PNG
+is animated with QML rotation and scale, without a network dependency at runtime.
