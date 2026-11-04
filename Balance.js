@@ -103,6 +103,7 @@ var FRESH_EGG_PRICE = 1000000000
 var BASE_PRICES = {
   mint: MINT_PRICE,
   rareCandy: RARE_CANDY_PRICE,
+  superRareCandy: 1250000000,
   shinyCharm: SHINY_CHARM_PRICE,
   turboIncubator: 750000000,
   luckyClover: 6000000000
@@ -112,7 +113,7 @@ var BASE_PRICES = {
 var PASSIVE_ITEMS = { shinyCharm: true }
 
 // Ordem em que a bag lista, independente da ordem do objeto de inventário.
-var BAG_ORDER = ["rareCandy", "mint", "shinyCharm", "egg:", "egg:uncommon", "egg:rare", "turboIncubator", "luckyClover", "egg:legendary"]
+var BAG_ORDER = ["rareCandy", "superRareCandy", "mint", "shinyCharm", "egg:", "egg:uncommon", "egg:rare", "turboIncubator", "luckyClover", "egg:legendary"]
 
 function eggPrice(tier) {
   if (!tier) return FRESH_EGG_PRICE
@@ -134,12 +135,13 @@ function shopPrice(key, shopDifficulty) {
 
 var PACK_PRICE = 50000000
 var PACKAGE_ORDER = ["poorPackage", "fancyPackage", "legendaryPackage"]
+var ITEM_RARITIES = ["common", "uncommon", "rare", "legendary", "mythical"]
 var PACKAGES = {
-  poorPackage: { label: "Poor Package", price: 50000000, meterLimit: 2000000000, power: 1, excludeCommon: false, color: "#a9a29b" },
-  fancyPackage: { label: "Fancy Package", price: 200000000, meterLimit: 3000000000, power: 0.5, excludeCommon: false, color: "#4a9eff" },
-  legendaryPackage: { label: "Legendary Package", price: 500000000, meterLimit: 4000000000, power: 0.25, excludeCommon: true, color: "#f5c542" }
+  poorPackage: { label: "Poor Package", price: 50000000, meterLimit: 2000000000, power: 1, minRarity: "common", color: "#a9a29b" },
+  fancyPackage: { label: "Fancy Package", price: 200000000, meterLimit: 3000000000, power: 0.5, minRarity: "uncommon", color: "#4a9eff" },
+  legendaryPackage: { label: "Legendary Package", price: 500000000, meterLimit: 4000000000, power: 0.25, minRarity: "rare", color: "#f5c542" }
 }
-var PACK_REWARDS = ["mint", "rareCandy", "turboIncubator", "egg:", "egg:uncommon", "luckyClover", "egg:rare", "shinyCharm", "egg:legendary"]
+var PACK_REWARDS = ["mint", "rareCandy", "turboIncubator", "egg:", "superRareCandy", "egg:uncommon", "luckyClover", "egg:rare", "shinyCharm", "egg:legendary"]
 
 function packReferencePrice(key) {
   if (key === "luckyClover") return 3000000000
@@ -169,7 +171,7 @@ function rngesusMeter(state, packageKey) {
 function packRewards(packageKey, rngesusOnly) {
   var config = PACKAGES[packageKey || "poorPackage"]
   var keys = PACK_REWARDS.filter(function (key) {
-    return (!config.excludeCommon || itemRarity(key) !== "common")
+    return (ITEM_RARITIES.indexOf(itemRarity(key)) >= ITEM_RARITIES.indexOf(config.minRarity))
            && (!rngesusOnly || itemRarity(key) === "legendary" || itemRarity(key) === "mythical")
   })
   function weight(key) { return Math.pow(MINT_PRICE / packReferencePrice(key), config.power) }
@@ -197,6 +199,7 @@ function itemLabel(key) {
     case "turboIncubator": return "Turbo Incubator"
     case "luckyClover": return "Lucky Clover"
     case "rareCandy": return "Rare Candy"
+    case "superRareCandy": return "Super Rare Candy"
     case "mint": return "Mint"
     case "shinyCharm": return "Shiny Charm"
     case "egg:": return "Egg"
@@ -211,6 +214,7 @@ function itemGlyph(key) {
   switch (key) {
     case "turboIncubator": return "⚡"
     case "luckyClover": return "🍀"
+    case "superRareCandy": return "🍭"
     case "rareCandy": return "🍬"
     case "mint": return "🌿"
     case "shinyCharm": return "✨"
@@ -223,6 +227,7 @@ function itemHint(key) {
     case "turboIncubator": return "halves hatch tokens for the next egg"
     case "luckyClover": return "2× shiny chance next hatch; stacks with Shiny Charm"
     case "rareCandy": return "+" + formatTokens(100000000) + " of growth"
+    case "superRareCandy": return "+" + formatTokens(250000000) + " of growth"
     case "mint": return "rerolls its nature"
     case "shinyCharm": return "shiny odds 1/64 → 1/48, forever"
     case "egg:": return "reserve for the next natural hatch"

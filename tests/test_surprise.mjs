@@ -8,9 +8,9 @@ const B = vm.createContext({})
 vm.runInContext(readFileSync(dir + 'Balance.js', 'utf8').replace(/^\.pragma library\s*/m,''), B)
 assert.equal(B.PACK_PRICE, 50000000)
 const rewards = B.packRewards()
-assert.equal(rewards.length, 9)
+assert.equal(rewards.length, 10)
 assert.ok(Math.abs(rewards.reduce((s,r)=>s+r.chance,0)-1)<1e-12)
-assert.equal(rewards.map(r=>r.rarity).join(','),'common,uncommon,uncommon,rare,rare,rare,legendary,legendary,mythical')
+assert.equal(rewards.map(r=>r.rarity).join(','),'common,uncommon,uncommon,rare,rare,rare,rare,legendary,legendary,mythical')
 assert.ok(rewards.every((r,i)=>i===0 || r.chance<rewards[i-1].chance))
 const rows=B.bagEntries({'egg:':2,'egg:rare':1, mint:1, shinyCharm:true})
 assert.equal(rows.length,4)
@@ -70,7 +70,8 @@ for (const packageKey of B.PACKAGE_ORDER) {
  const mythic=rows.find(r=>r.rarity==='mythical').chance
  assert.ok(rare>previousRare);assert.ok(mythic>previousMythic)
  previousRare=rare;previousMythic=mythic
- if(packageKey==='legendaryPackage')assert.ok(rows.every(r=>r.rarity!=='common'))
+ if(packageKey==='fancyPackage')assert.ok(rows.every(r=>r.rarity!=='common'))
+ if(packageKey==='legendaryPackage')assert.ok(rows.every(r=>!['common','uncommon'].includes(r.rarity)))
  console.log(`${B.PACKAGES[packageKey].label}: ${py.price/1e6}M; Rare+ ${(rare*100).toFixed(2)}%; Mythic ${(mythic*100).toFixed(2)}%`)
 }
 
@@ -104,3 +105,9 @@ for(const key of B.PACKAGE_ORDER){
 }
 assert.equal(B.rngesusMeter({rngesusMeters:{poorPackage:50000000}},'fancyPackage').tokens,0)
 console.log('PASS: RNGesus thresholds, independent meters, guarantee eligibility and Python/JS odds parity')
+
+assert.equal(B.itemRarity('superRareCandy'),'rare')
+assert.equal(B.itemLabel('superRareCandy'),'Super Rare Candy')
+assert.equal(B.bagEntries({superRareCandy:2})[0].count,2)
+assert.equal(B.bagEntries({superRareCandy:2})[0].usable,true)
+assert.ok(B.itemHint('superRareCandy').includes('250'))

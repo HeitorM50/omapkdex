@@ -762,6 +762,7 @@ def cmd_absorb(argv: list[str]) -> int:
 # lifetimeTokens − spentTokens, então somar isto ao lifetime faria de cada candy
 # uma máquina de dinheiro.
 RARE_CANDY_XP = 100_000_000
+CANDY_GROWTH = {"rareCandy": RARE_CANDY_XP, "superRareCandy": 250_000_000}
 
 # Preço = 5× o que a candy entrega, de propósito. Os tokens são usados duas
 # vezes (medidor de crescimento E carteira); preço igual ao XP tornaria a compra
@@ -816,6 +817,7 @@ def egg_price(tier: str | None) -> int:
 
 BASE_PRICES = {
     "rareCandy": RARE_CANDY_PRICE,
+    "superRareCandy": 1_250_000_000,
     "mint": MINT_PRICE,
     "shinyCharm": SHINY_CHARM_PRICE,
     "turboIncubator": 750_000_000,
@@ -840,12 +842,13 @@ def shop_price(entry: str, shop_difficulty: float) -> int:
 
 
 PACK_PRICE = 50_000_000  # Legacy surprisePack alias is the Poor Package.
+ITEM_RARITIES = ("common", "uncommon", "rare", "legendary", "mythical")
 PACKAGES = {
-    "poorPackage": {"price": PACK_PRICE, "power": 1.0, "excludeCommon": False, "meterLimit": 2_000_000_000},
-    "fancyPackage": {"price": 200_000_000, "power": 0.5, "excludeCommon": False, "meterLimit": 3_000_000_000},
-    "legendaryPackage": {"price": 500_000_000, "power": 0.25, "excludeCommon": True, "meterLimit": 4_000_000_000},
+    "poorPackage": {"price": PACK_PRICE, "power": 1.0, "minRarity": "common", "meterLimit": 2_000_000_000},
+    "fancyPackage": {"price": 200_000_000, "power": 0.5, "minRarity": "uncommon", "meterLimit": 3_000_000_000},
+    "legendaryPackage": {"price": 500_000_000, "power": 0.25, "minRarity": "rare", "meterLimit": 4_000_000_000},
 }
-PACK_REWARDS = ("mint", "rareCandy", "turboIncubator", "egg:", "egg:uncommon", "luckyClover", "egg:rare", "shinyCharm", "egg:legendary")
+PACK_REWARDS = ("mint", "rareCandy", "turboIncubator", "egg:", "superRareCandy", "egg:uncommon", "luckyClover", "egg:rare", "shinyCharm", "egg:legendary")
 
 
 def pack_reference_price(key: str) -> int:
@@ -881,7 +884,7 @@ def rngesus_meter(state: dict, package: str) -> dict:
 def pack_pool(package: str = "poorPackage", rngesus_only: bool = False) -> tuple[list[str], list[float]]:
     config = PACKAGES[package]
     keys = [key for key in PACK_REWARDS
-            if (not config["excludeCommon"] or item_rarity(key) != "common")
+            if (ITEM_RARITIES.index(item_rarity(key)) >= ITEM_RARITIES.index(config["minRarity"]))
             and (not rngesus_only or item_rarity(key) in ("legendary", "mythical"))]
     weights = [(MINT_PRICE / pack_reference_price(key)) ** config["power"] for key in keys]
     return keys, weights
@@ -927,7 +930,7 @@ def buy_pack(package: str = "poorPackage") -> int:
     return 0 if _with_state_lock(apply) else 1
 
 
-TRADE_RARITIES = ("common", "uncommon", "rare", "legendary", "mythical")
+TRADE_RARITIES = ITEM_RARITIES
 TRADE_COSTS = {"common": 5, "uncommon": 4, "rare": 3, "legendary": 2}
 
 
@@ -1995,9 +1998,9 @@ def cmd_buy(argv: list[str]) -> int:
 
 
 def cmd_use(argv: list[str]) -> int:
-    """use <rareCandy|mint> <growthDifficulty>"""
+    """use <rareCandy|superRareCandy|mint> <growthDifficulty>"""
     if not argv:
-        log("uso: omapkdex-sync use <rareCandy|mint> <growthDifficulty>")
+        log("uso: omapkdex-sync use <rareCandy|superRareCandy|mint> <growthDifficulty>")
         return 2
     what = argv[0]
     difficulty = clamp_difficulty(argv[1] if len(argv) > 1 else DIFFICULTY_DEFAULT)
@@ -2027,7 +2030,7 @@ def cmd_use(argv: list[str]) -> int:
             return True
         return 0 if _with_state_lock(queue_egg) else 1
 
-    if what not in ("rareCandy", "mint"):
+    if what not in (*CANDY_GROWTH, "mint"):
         log(f"item não usável: {what}")
         return 2
 
@@ -2075,18 +2078,18 @@ def cmd_use(argv: list[str]) -> int:
 
     def apply_candy(state):
         inventory = state.setdefault("inventory", {})
-        if int(inventory.get("rareCandy") or 0) <= 0:
-            log("sem Rare Candy no inventário")
+        if int(inventory.get(what) or 0) <= 0:
+            log(f"sem {what} no inventário")
             return False
         if not state.get("hatched"):
             log("a candy só serve num Pokémon chocado")
             return False
 
-        inventory["rareCandy"] = int(inventory["rareCandy"]) - 1
+        inventory[what] = int(inventory[what]) - 1
         # O XP entra SÓ no progresso. Somar a lifetimeTokens faria de cada candy
         # uma máquina de dinheiro, porque a carteira é lifetime − spent.
         # E não é escalado pela dificuldade: escalar os dois se cancelaria.
-        state["tokensIntoStage"] = int(state.get("tokensIntoStage") or 0) + RARE_CANDY_XP
+        state["tokensIntoStage"] = int(state.get("tokensIntoStage") or 0) + CANDY_GROWTH[what]
         graduated["yes"] = advance_stages(state, rarity, total_forms, difficulty, boost)
         return True
 
@@ -2109,7 +2112,7 @@ def cmd_use(argv: list[str]) -> int:
     if not _with_state_lock(apply_candy, depois):
         return 1
 
-    log(f"usou uma Rare Candy (+{RARE_CANDY_XP})"
+    log(f"usou {what} (+{CANDY_GROWTH[what]})"
         + (" e graduou" if graduated["yes"] else ""))
     return 0
 

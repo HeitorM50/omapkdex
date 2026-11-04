@@ -15,7 +15,7 @@ Column {
   readonly property var tiers: ["common", "uncommon", "rare", "legendary", "mythical"]
   readonly property var state: host && host.progressState ? host.progressState : ({})
   readonly property bool busy: host ? host.tradeBusy === true : false
-  readonly property var inputs: Balance.PACK_REWARDS.filter(function(k) { return Balance.itemRarity(k) === root.tiers[root.tierIndex] })
+  readonly property var inputs: Balance.PACK_REWARDS.filter(function(k) { var inv = root.state.inventory || {}; return Balance.itemRarity(k) === root.tiers[root.tierIndex] && (k === "shinyCharm" ? inv.shinyCharm === true || Number(inv.shinyCharmDuplicates) > 0 : Number(inv[k]) > 0) })
   readonly property var outputs: Balance.PACK_REWARDS.filter(function(k) { return Balance.itemRarity(k) === root.tiers[root.tierIndex + 1] })
   readonly property int requiredCount: [5, 4, 3, 2][tierIndex]
   readonly property int total: Object.keys(selected).reduce(function(n, k) { return n + root.selected[k] }, 0)
@@ -84,27 +84,89 @@ Column {
         }
       }
     }
-    Repeater {
-      model: root.inputs
-      Row {
-        required property string modelData
-        width: parent.width
-        spacing: Style.space(4)
-        Text {
-          width: parent.width - Style.space(96)
-          height: Style.space(34)
-          verticalAlignment: Text.AlignVCenter
-          text: Balance.itemLabel(parent.modelData) + " · " + root.available(parent.modelData) + " available"
-          textFormat: Text.PlainText
-          elide: Text.ElideRight
-          color: root.foreground
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+    Text {
+      width: parent.width
+      text: root.inputs.length ? "Click an item to add it · right-click to remove" : "No items of this rarity in your Bag."
+      textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
+      color: root.foreground
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+    }
+    Grid {
+      id: inventoryGrid
+      width: parent.width
+      columns: 3
+      spacing: Style.space(5)
+      Repeater {
+        model: root.inputs
+        Controls.Button {
+          id: tile
+          objectName: "tradeInput-" + modelData
+          required property string modelData
+          readonly property int chosen: root.selected[modelData] || 0
+          readonly property int availableCount: root.available(modelData)
+          readonly property color rarityColor: Balance.rarityColor(Balance.itemRarity(modelData), root.foreground)
+          width: (inventoryGrid.width - inventoryGrid.spacing * 2) / 3
+          height: Style.space(112)
+          padding: Style.space(5)
+          Accessible.name: Balance.itemLabel(modelData) + ", " + availableCount + " available, " + chosen + " selected"
+          Accessible.description: "Activate to add one. Right-click to remove one, or use Clear selection."
+          enabled: !root.busy && availableCount > 0
+          onClicked: {
+            if (root.total < root.requiredCount && chosen < availableCount) root.adjust(modelData, 1)
+          }
+          TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: { if (!root.busy && tile.chosen > 0) root.adjust(tile.modelData, -1) }
+          }
+          Controls.ToolTip.visible: hovered
+          Controls.ToolTip.text: Balance.itemHint(modelData)
+          background: Rectangle {
+            radius: Style.space(5)
+            color: Qt.rgba(tile.rarityColor.r, tile.rarityColor.g, tile.rarityColor.b, tile.chosen > 0 ? 0.18 : (tile.hovered ? 0.10 : 0.04))
+            border.width: tile.chosen > 0 || tile.activeFocus ? 2 : 1
+            border.color: tile.chosen > 0 || tile.activeFocus ? tile.rarityColor : Qt.rgba(tile.rarityColor.r, tile.rarityColor.g, tile.rarityColor.b, 0.3)
+          }
+          contentItem: Column {
+            spacing: Style.space(3)
+            opacity: tile.enabled ? 1 : 0.45
+            Text {
+              width: parent.width
+              text: Balance.itemGlyph(tile.modelData)
+              textFormat: Text.PlainText
+              font.pixelSize: Style.font.subtitle
+              horizontalAlignment: Text.AlignHCenter
+            }
+            Text {
+              width: parent.width
+              text: Balance.itemLabel(tile.modelData)
+              textFormat: Text.PlainText
+              color: tile.rarityColor
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WordWrap
+            }
+            Text {
+              width: parent.width
+              text: tile.availableCount ? tile.chosen + " / " + tile.availableCount + " selected" : "Protected"
+              textFormat: Text.PlainText
+              color: root.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WordWrap
+            }
+          }
         }
-        BattleButton { width: Style.space(28); text: "−"; Accessible.name: "Remove " + parent.modelData; enabled: !root.busy && (root.selected[parent.modelData] || 0) > 0; onClicked: root.adjust(parent.modelData, -1) }
-        Text { width: Style.space(20); height: Style.space(34); verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; text: root.selected[parent.modelData] || 0; color: root.foreground }
-        BattleButton { width: Style.space(28); text: "+"; Accessible.name: "Add " + parent.modelData; enabled: !root.busy && root.total < root.requiredCount && (root.selected[parent.modelData] || 0) < root.available(parent.modelData); onClicked: root.adjust(parent.modelData, 1) }
       }
+    }
+    BattleButton {
+      text: "Clear selection"
+      foreground: root.foreground
+      enabled: !root.busy && root.total > 0
+      onClicked: root.selected = ({})
     }
     Text {
       text: root.total + "/" + root.requiredCount + " selected · Choose your guaranteed " + Balance.rarityLabel(root.tiers[root.tierIndex + 1]) + ":"

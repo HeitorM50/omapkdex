@@ -174,7 +174,9 @@ The individuals rather than the species — every creature you raised, newest fi
 
 The tokens you already burned are currency: your wallet is the lifetime total minus what you have spent.
 
-The Shop sells **Poor (50M), Fancy (200M) and Legendary (500M) packages**. Each contains one reward and shows its rarity; higher tiers improve rare-item odds. Legendary excludes Common items. Eggs stay in the Bag; reserve one for the next natural hatch without interrupting your current Pokémon.
+Super Rare Candy is a Rare reward granting 250M growth without adding wallet tokens.
+
+The Shop sells **Poor (50M), Fancy (200M) and Legendary (500M) packages**. Each contains one reward and shows its rarity; higher tiers improve rare-item odds. Fancy excludes Common items; Legendary excludes Common and Uncommon items. Eggs stay in the Bag; reserve one for the next natural hatch without interrupting your current Pokémon.
 
 Filling a rate-limit window pays **Rare Candy** — the moment you hit the ceiling becomes the moment your creature grows.
 

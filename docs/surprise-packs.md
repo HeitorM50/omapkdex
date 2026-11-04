@@ -5,8 +5,9 @@ The Shop offers **Poor Package (50M)**, **Fancy Package (200M)** and
 to inspect its odds, then click Buy and confirm. Switching packages cancels
 confirmation; packages cannot change during a purchase or its animation.
 
-Poor preserves the original odds. Fancy flattens reference-price weights with
-a square root; Legendary uses a fourth root and excludes Common items entirely.
+Poor allows every rarity. Fancy excludes Common and flattens reference-price
+weights with a square root; Legendary uses a fourth root and allows only Rare
+or better (no Common or Uncommon).
 For an eligible reward, weight is `(100,000,000 / reference_price) ** power`,
 where power is 1, 0.5 or 0.25. Normalize only across that package's eligible pool.
 More expensive items stay rarer within each package, including Mythic Legendary
@@ -15,15 +16,16 @@ from Poor to Fancy to Legendary. An owned Shiny Charm stays eligible.
 
 | Reward | Rarity | Poor · 50M | Fancy · 200M | Legendary · 500M |
 | --- | --- | ---: | ---: | ---: |
-| Mint | Common | 64.07% | 34.36% | Excluded |
-| Rare Candy | Uncommon | 12.81% | 15.37% | 17.59% |
-| Turbo Incubator | Uncommon | 8.54% | 12.55% | 15.90% |
-| Egg | Rare | 6.41% | 10.87% | 14.79% |
-| Uncommon Egg | Rare | 2.56% | 6.87% | 11.77% |
-| Lucky Clover | Rare | 2.14% | 6.27% | 11.24% |
-| Rare Egg | Legendary | 1.60% | 5.43% | 10.46% |
-| Shiny Charm | Legendary | 1.07% | 4.44% | 9.45% |
-| Legendary Egg | Mythical | 0.80% | 3.84% | 8.80% |
+| Mint | Common | 60.94% | Excluded | Excluded |
+| Rare Candy | Uncommon | 12.19% | 20.39% | Excluded |
+| Turbo Incubator | Uncommon | 8.13% | 16.65% | Excluded |
+| Egg | Rare | 6.09% | 14.42% | 18.38% |
+| Super Rare Candy | Rare | 4.88% | 12.90% | 17.38% |
+| Uncommon Egg | Rare | 2.44% | 9.12% | 14.61% |
+| Lucky Clover | Rare | 2.03% | 8.33% | 13.96% |
+| Rare Egg | Legendary | 1.52% | 7.21% | 12.99% |
+| Shiny Charm | Legendary | 1.02% | 5.89% | 11.74% |
+| Legendary Egg | Mythical | 0.76% | 5.10% | 10.93% |
 
 The live UI displays these same normalized odds. Growth settings and the old
 shopDifficulty multiplier cannot alter package prices or odds. Legacy direct
@@ -72,7 +74,7 @@ inventory are retained. Package tiers change only prices and reward odds; item e
 ## Mythic Legendary Egg
 
 Legendary Egg is a **Mythic** item (purple), with an 8B reference price. It has
-the smallest weight of all nine pack rewards. Its item rarity is distinct from
+the smallest weight of all ten pack rewards. Its item rarity is distinct from
 the Pokémon rarity: reserving it guarantees a species explicitly marked
 `isLegendary` in the cached index at the next natural species selection. A low
 capture rate alone does not qualify; species marked only mythical do not qualify.
@@ -118,3 +120,12 @@ purchases after installing this feature: previous saves retain only the most
 recent receipt and cannot reconstruct complete per-package spending. Historical
 spentTokens, captured Pokémon and existing inventory are never rewritten to
 infer missing history.
+
+## Super Rare Candy
+
+Super Rare Candy is Rare and grants **250M growth tokens** when used on a
+hatched Pokémon, following the same evolution/graduation flow as Rare Candy.
+It does not increase lifetimeTokens or the spendable wallet. Its reference
+price is 1.25B (2.5 times Rare Candy), and it is eligible in all three packages
+and as a Rare input/output in trade ups. Missing inventory fields in old saves
+default to zero; no save migration is required.

@@ -155,8 +155,8 @@ Column {
   Text {
     width: parent.width
     text: root.selectedPackage === "poorPackage" ? "One reward · all rarities · original odds."
-          : root.selectedPackage === "fancyPackage" ? "One reward · all rarities · better rare-item odds."
-          : "One reward · Uncommon and above · best rare-item odds."
+          : root.selectedPackage === "fancyPackage" ? "One reward · Uncommon or better · no Common items."
+          : "One reward · Rare or better · no Common or Uncommon items."
     textFormat: Text.PlainText
     color: Qt.darker(root.foreground, 1.4)
     font.family: root.fontFamily

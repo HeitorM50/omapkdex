@@ -1,8 +1,11 @@
 # Trade up
 
-Open **Bag → Realizar Trade Up**, choose the input rarity, add items using +/−,
+Open **Bag → Realizar Trade Up**, choose the input rarity, click inventory tiles to add items,
 choose the output and confirm the review. Different items of the same rarity
-can be combined. The result is guaranteed and costs no tokens:
+can be combined. The rarity tabs filter the grid to owned items only.
+Click adds one copy; right-click removes one. **Clear selection** resets the
+draft. Reserved/active items are shown as protected when no spare copies remain.
+The result is guaranteed and costs no tokens:
 
 Common → Uncommon → Rare → Legendary → Mythic.
 

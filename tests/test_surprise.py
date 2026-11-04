@@ -92,8 +92,8 @@ class Packs(unittest.TestCase):
         self.assertEqual(ps.cmd_use(['egg:rare','1']),1)
         self.assertEqual(ps.load_state(),after)
 
-    def test_weights_cover_all_nine_and_cheaper_is_more_likely(self):
-        self.assertEqual(set(ps.PACK_REWARDS), {'mint','rareCandy','egg:','egg:uncommon','shinyCharm','egg:rare','turboIncubator','luckyClover','egg:legendary'})
+    def test_weights_cover_all_rewards_and_cheaper_is_more_likely(self):
+        self.assertEqual(set(ps.PACK_REWARDS), {'superRareCandy','mint','rareCandy','egg:','egg:uncommon','shinyCharm','egg:rare','turboIncubator','luckyClover','egg:legendary'})
         prices=[ps.pack_reference_price(k) for k in ps.PACK_REWARDS]
         self.assertEqual(prices,sorted(prices))
         class Rng:
@@ -259,12 +259,12 @@ class Packs(unittest.TestCase):
                 state=copy.deepcopy(self.state)
                 state.update(lifetimeTokens=price,spentTokens=0)
                 ps.write_json(ps.state_path(),state)
-                with patch.object(ps,'roll_pack',return_value='rareCandy') as roll:
+                with patch.object(ps,'roll_pack',return_value='superRareCandy') as roll:
                     self.assertEqual(ps.cmd_buy([package,'0.1']),0)
                     self.assertEqual(roll.call_args.kwargs['package'],package)
                 after=ps.load_state()
                 self.assertEqual(after['spentTokens'],price)
-                self.assertEqual(after['inventory']['rareCandy'],3)
+                self.assertEqual(after['inventory']['superRareCandy'],1)
                 self.assertEqual(after['lastPack']['package'],package)
                 for field in ['hatched','stage','tokensIntoStage']:
                     self.assertEqual(after[field],state[field])
@@ -275,7 +275,7 @@ class Packs(unittest.TestCase):
                     roll.assert_not_called()
                 self.assertEqual(Path(ps.state_path()).read_bytes(),before)
 
-    def test_premium_odds_improve_and_legendary_excludes_common(self):
+    def test_premium_odds_improve_and_package_floors(self):
         ranks={'common':0,'uncommon':1,'rare':2,'legendary':3,'mythical':4}
         pools=[]
         for package in ['poorPackage','fancyPackage','legendaryPackage']:
@@ -283,25 +283,24 @@ class Packs(unittest.TestCase):
             self.assertTrue(all(w>0 for w in weights))
             odds={key:w/sum(weights) for key,w in zip(keys,weights)}
             pools.append(odds)
-            if package=='legendaryPackage':
-                self.assertNotIn('mint',keys)
-                self.assertTrue(all(ranks[ps.item_rarity(key)]>=1 for key in keys))
-            else:self.assertIn('mint',keys)
+            minimum = {'poorPackage':0,'fancyPackage':1,'legendaryPackage':2}[package]
+            self.assertTrue(all(ranks[ps.item_rarity(key)]>=minimum for key in keys))
+            self.assertEqual('mint' in keys, package=='poorPackage')
         for rank in [2,3,4]:
             chances=[sum(p for k,p in odds.items() if ranks[ps.item_rarity(k)]>=rank) for odds in pools]
             self.assertLess(chances[0],chances[1])
             self.assertLess(chances[1],chances[2])
         self.assertTrue(all(odds['egg:legendary']<odds['shinyCharm'] for odds in pools))
 
-    def test_legendary_roll_never_includes_mint(self):
+    def test_legendary_roll_starts_at_rare(self):
         class Rng:
             def choices(self,keys,weights,k):
                 self.keys=keys
                 return [keys[0]]
         rng=Rng()
-        self.assertEqual(ps.roll_pack(rng,package='legendaryPackage'),'rareCandy')
+        self.assertEqual(ps.roll_pack(rng,package='legendaryPackage'),'egg:')
         self.assertNotIn('mint',rng.keys)
-        self.assertEqual(len(rng.keys),8)
+        self.assertEqual(len(rng.keys),7)
 
     def test_rngesus_threshold_requires_the_following_opening(self):
         for package,price,limit in [('poorPackage',50000000,2000000000),('fancyPackage',200000000,3000000000),('legendaryPackage',500000000,4000000000)]:
@@ -310,7 +309,7 @@ class Packs(unittest.TestCase):
                 state.update(lifetimeTokens=10000000000,spentTokens=0,
                              rngesusMeters={package:limit-price,'untouchedPackage':123})
                 ps.write_json(ps.state_path(),state)
-                with patch.object(ps,'roll_pack',return_value='rareCandy') as roll:
+                with patch.object(ps,'roll_pack',return_value='superRareCandy') as roll:
                     self.assertEqual(ps.cmd_buy([package]),0)
                     self.assertFalse(roll.call_args.kwargs['rngesus_only'])
                 after=ps.load_state()
