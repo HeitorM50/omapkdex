@@ -258,5 +258,26 @@ with Sandbox() as sb:
     eq("aberta", col['entries'][0]['graduatedAt'], None)
     eq("shiny ausente lê False", col['entries'][0]['shiny'], False)
 
+print("\n--- 13. copilot e antigravity contam como os outros agentes ---")
+with Sandbox() as sb:
+    ps = load_helper(); sb.put_companion('common', ['a','b','c'])
+    base = {"modelUsage": {"fixture-model": {"inputTokens": 500_000, "outputTokens": 0}}, "limits": []}
+    sb.put_record('copilot', base)
+    sb.put_record('antigravity', base)
+    ps.cmd_absorb(['0.3'])
+    s = sb.read_state()
+    eq("régua do copilot marcada", s['lastSeen'].get('copilot'), 500_000)
+    eq("régua do antigravity marcada", s['lastSeen'].get('antigravity'), 500_000)
+    eq("histórico não conta", s['lifetimeTokens'], 0)
+    sb.put_record('copilot', bump(sb.record('copilot'), 300_000))
+    sb.put_record('antigravity', bump(sb.record('antigravity'), 200_000))
+    ps.cmd_absorb(['0.3'])
+    eq("deltas dos dois somados", sb.read_state()['lifetimeTokens'], 500_000)
+
+print("\n--- 14. o QML e o helper leem a mesma lista de agentes ---")
+qml = (Path(__file__).resolve().parents[1] / 'BarWidget.qml').read_text(encoding='utf-8')
+ids = json.loads(qml.split('readonly property var agentIds:', 1)[1].split('\n', 1)[0])
+eq("agentIds == AGENT_IDS", tuple(ids), load_helper().AGENT_IDS)
+
 print(f"\n{fails} FALHA(S)" if fails else "\nTodos os testes passaram")
 raise SystemExit(1 if fails else 0)

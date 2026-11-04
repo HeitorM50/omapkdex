@@ -416,7 +416,9 @@ DIFFICULTY_MIN, DIFFICULTY_MAX, DIFFICULTY_DEFAULT = 0.1, 2.0, 1.0
 TOKEN_KEYS = ("inputTokens", "outputTokens",
               "cacheCreationInputTokens", "cacheReadInputTokens")
 
-AGENT_IDS = ("claude", "codex", "fireworks")
+# Os coletores do omarchy.agents mais os locais (copilot, antigravity) que
+# gravam no mesmo diretório. Manter em sincronia com agentIds no BarWidget.qml.
+AGENT_IDS = ("claude", "codex", "fireworks", "copilot", "antigravity")
 
 
 def clamp_difficulty(value) -> float:

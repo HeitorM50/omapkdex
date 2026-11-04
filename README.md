@@ -34,7 +34,9 @@
 > `~/.local/state/omarchy/agents/usage/*.json`.
 >
 > That plugin must be **enabled and have recorded usage** — so you need at least
-> one AI coding CLI (Claude Code, Codex, Fireworks) that has actually run. Until
+> one AI coding CLI (Claude Code, Codex, Fireworks, GitHub Copilot, Antigravity)
+> that has actually run. Copilot and Antigravity records are read the same way
+> when a collector writes them to that directory. Until
 > a record exists, OmaPkDex shows an egg and never hatches. That is not a
 > failure: there is simply nothing to grow on yet.
 >

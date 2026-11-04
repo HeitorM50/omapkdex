@@ -44,9 +44,11 @@ BarWidget {
     return base + "/omarchy/" + moduleName
   }
 
-  // Os ids dos coletores que o omarchy.agents distribui. Um record ausente
-  // simplesmente não carrega — o widget não exige nenhum agente específico.
-  readonly property var agentIds: ["claude", "codex", "fireworks"]
+  // Os ids dos coletores que o omarchy.agents distribui, mais os coletores
+  // locais (copilot, antigravity) que gravam no mesmo diretório. Um record
+  // ausente simplesmente não carrega — o widget não exige nenhum agente.
+  // Manter em sincronia com AGENT_IDS em bin/omapkdex-sync.
+  readonly property var agentIds: ["claude", "codex", "fireworks", "copilot", "antigravity"]
 
   readonly property var battles: battleAgent
   BattleAgent {
