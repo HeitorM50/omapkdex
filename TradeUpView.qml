@@ -108,8 +108,8 @@ Column {
           readonly property int availableCount: root.available(modelData)
           readonly property color rarityColor: Balance.rarityColor(Balance.itemRarity(modelData), root.foreground)
           width: (inventoryGrid.width - inventoryGrid.spacing * 2) / 3
-          height: Style.space(112)
-          padding: Style.space(5)
+          height: Style.space(64)
+          padding: Style.space(4)
           Accessible.name: Balance.itemLabel(modelData) + ", " + availableCount + " available, " + chosen + " selected"
           Accessible.description: "Activate to add one. Right-click to remove one, or use Clear selection."
           enabled: !root.busy && availableCount > 0
@@ -121,7 +121,8 @@ Column {
             onTapped: { if (!root.busy && tile.chosen > 0) root.adjust(tile.modelData, -1) }
           }
           Controls.ToolTip.visible: hovered
-          Controls.ToolTip.text: Balance.itemHint(modelData)
+          Controls.ToolTip.text: Balance.itemLabel(modelData) + " · " + Balance.itemHint(modelData)
+            + (availableCount === 0 ? " · Protected" : "")
           background: Rectangle {
             radius: Style.space(5)
             color: Qt.rgba(tile.rarityColor.r, tile.rarityColor.g, tile.rarityColor.b, tile.chosen > 0 ? 0.18 : (tile.hovered ? 0.10 : 0.04))
@@ -129,7 +130,7 @@ Column {
             border.color: tile.chosen > 0 || tile.activeFocus ? tile.rarityColor : Qt.rgba(tile.rarityColor.r, tile.rarityColor.g, tile.rarityColor.b, 0.3)
           }
           contentItem: Column {
-            spacing: Style.space(3)
+            spacing: Style.space(2)
             opacity: tile.enabled ? 1 : 0.45
             Text {
               width: parent.width
@@ -146,11 +147,11 @@ Column {
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
+              elide: Text.ElideRight
             }
             Text {
               width: parent.width
-              text: tile.availableCount ? tile.chosen + " / " + tile.availableCount + " selected" : "Protected"
+              text: tile.chosen + "/" + tile.availableCount
               textFormat: Text.PlainText
               color: root.foreground
               font.family: Style.font.family
