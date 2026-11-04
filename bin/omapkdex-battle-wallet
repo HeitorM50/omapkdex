@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Local-only wallet commands. All mutations use absorb's flock and atomic write."""
+import importlib.machinery
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sys
+import time
+# A reservation whose peer never comes back can be voided locally after this long.
+ESCROW_TTL=7*24*3600
+loader=importlib.machinery.SourceFileLoader('wallet_sync',str(Path(__file__).with_name('omapkdex-sync')))
+spec=importlib.util.spec_from_loader(loader.name,loader)
+sync=importlib.util.module_from_spec(spec);loader.exec_module(sync)
+
+def check_hash(value):
+ if not isinstance(value,str) or not re.fullmatch('[a-f0-9]{64}',value):raise ValueError('Invalid digest')
+ return value
+
+def main(op,data):
+ if op not in ('status','reserve','settle','expire'):raise ValueError('Unknown wallet operation')
+ if op=='status':return summary(sync.load_state())
+ match_id=data.get('matchId')
+ if not isinstance(match_id,str) or not re.fullmatch('[-a-zA-Z0-9_]{1,80}',match_id):raise ValueError('Invalid match ID')
+ def apply(state):
+  escrows=state.setdefault('battleEscrows',{});settled=state.setdefault('battleSettled',{})
+  if op=='reserve':
+   amount=data.get('amount')
+   if type(amount) is not int or amount<1 or amount>1000000000:raise ValueError('Stake must be 1..1B tokens')
+   entry={'amount':amount,'rulesHash':check_hash(data.get('rulesHash')),'opponent':check_hash(data.get('opponent'))}
+   if match_id in settled:raise ValueError('Match already settled')
+   if match_id in escrows:
+    if any(escrows[match_id].get(k)!=v for k,v in entry.items()):raise ValueError('Conflicting reservation')
+    return True
+   if sync.available_tokens(state)<amount:raise ValueError('Insufficient available tokens')
+   escrows[match_id]={**entry,'createdAt':int(time.time())}
+  elif op=='expire':
+   if match_id in settled:
+    if settled[match_id].get('expired'):return True
+    raise ValueError('Match already settled; resume it to finish')
+   if match_id not in escrows:raise ValueError('No reservation for this match')
+   left=int(escrows[match_id].get('createdAt') or 0)+ESCROW_TTL-int(time.time())
+   if left>0:raise ValueError(f'Reservation can be released in {(left+3599)//3600}h if the opponent does not return')
+   amount=escrows[match_id]['amount']
+   settled[match_id]={'outcome':'void','amount':amount,'resultHash':'0'*64,'expired':True,'settledAt':int(time.time())}
+   del escrows[match_id]
+  else:
+   outcome=data.get('outcome');digest=check_hash(data.get('resultHash'))
+   if outcome not in ('win','loss','draw','void'):raise ValueError('Invalid outcome')
+   if match_id in settled:
+    if settled[match_id]['outcome']!=outcome or settled[match_id]['resultHash']!=digest:raise ValueError('Conflicting settlement')
+    return True
+   if match_id not in escrows:raise ValueError('No reservation for this match')
+   amount=escrows[match_id]['amount']
+   state['battleNet']=int(state.get('battleNet') or 0)+(amount if outcome=='win' else -amount if outcome=='loss' else 0)
+   settled[match_id]={'outcome':outcome,'amount':amount,'resultHash':digest,'settledAt':int(time.time())}
+   del escrows[match_id]
+  return True
+ if not sync._with_state_lock(apply):raise ValueError('Wallet busy; try again')
+ return summary(sync.load_state())
+
+def summary(state):
+ return {'available':sync.available_tokens(state),'net':state.get('battleNet',0),'reservations':state.get('battleEscrows',{}),'settlements':state.get('battleSettled',{})}
+if __name__=='__main__':
+ try:
+  if len(sys.argv)>3:raise ValueError('Too many arguments')
+  print(json.dumps(main(sys.argv[1] if len(sys.argv)>1 else 'status',json.loads(sys.argv[2]) if len(sys.argv)>2 else {})))
+ except Exception as exc:
+  print(json.dumps({'error':str(exc)}));sys.exit(1)

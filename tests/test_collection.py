@@ -4,6 +4,8 @@
 Funções puras: sem rede e sem tocar no estado real. O teste de ponta a ponta
 que realmente chama a PokéAPI vive em test_absorb.py.
 """
+from pathlib import Path
+
 import importlib.machinery
 import importlib.util
 import json
@@ -11,8 +13,7 @@ import os
 import shutil
 import tempfile
 
-PLUGIN = os.path.expanduser(
-    '~/.config/omarchy/plugins/io.github.heitorm50.omapkdex/bin/omapkdex-sync')
+PLUGIN = str(Path(__file__).resolve().parents[1] / 'bin/omapkdex-sync')
 
 fails = 0
 

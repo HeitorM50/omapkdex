@@ -48,6 +48,14 @@ BarWidget {
   // simplesmente não carrega — o widget não exige nenhum agente específico.
   readonly property var agentIds: ["claude", "codex", "fireworks"]
 
+  readonly property var battles: battleAgent
+  BattleAgent {
+    id: battleAgent
+    pluginDir: root.pluginDir
+    active: root.opened && root.panelLoaderTab >= 6
+  }
+  readonly property int panelLoaderTab: panelLoader.item ? panelLoader.item.tab : 0
+
   // ---- Settings
   readonly property real difficulty: Balance.clampDifficulty(setting("difficulty", 0.3))
   // Independente da de crescimento, como no original: uma é o ritmo do jogo, a
@@ -150,7 +158,7 @@ BarWidget {
   readonly property var progress: Balance.progress(rarity, totalForms, stage,
                                                    tokensIntoStage, difficulty,
                                                    growthBoost ? 2 : 1)
-  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty)
+  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty, progressState && progressState.turboIncubatorActive)
 
   readonly property real todayTokens: {
     var total = 0
@@ -280,8 +288,12 @@ BarWidget {
     hatchProc.running = true
   }
 
+  readonly property bool packBusy: buyProc.running
+  property string packError: ""
+
   function buy(key, tier) {
     if (buyProc.running) return
+    root.packError = ""
     var isEgg = String(key).indexOf("egg") === 0
     buyProc.key = isEgg ? "egg" : key
     buyProc.tier = isEgg ? (String(key).split(":")[1] || "") : ""
@@ -292,6 +304,17 @@ BarWidget {
     if (useProc.running) return
     useProc.key = key
     useProc.running = true
+  }
+
+  readonly property bool tradeBusy: tradeProc.running
+  property string tradeMessage: ""
+
+  function tradeUp(inputs, target) {
+    if (tradeProc.running) return
+    tradeMessage = ""
+    tradeProc.inputs = JSON.stringify(inputs)
+    tradeProc.target = target
+    tradeProc.running = true
   }
 
   // Fixar é preferência, não progresso, então vive nas settings do widget
@@ -588,7 +611,10 @@ BarWidget {
     stdout: StdioCollector { waitForEnd: true }
     stderr: StdioCollector { waitForEnd: true }
     onExited: function (code) {
-      if (code !== 0) console.warn(root.moduleName, "compra recusada:", buyProc.key)
+      if (code !== 0) {
+        root.packError = "Purchase failed. Check your balance and try again."
+        console.warn(root.moduleName, "compra recusada:", buyProc.key)
+      }
       root.reloadFiles()
     }
   }
@@ -601,6 +627,20 @@ BarWidget {
     stderr: StdioCollector { waitForEnd: true }
     onExited: function (code) {
       if (code !== 0) console.warn(root.moduleName, "uso recusado:", useProc.key)
+      root.reloadFiles()
+    }
+  }
+
+  Process {
+    id: tradeProc
+    property string inputs: "{}"
+    property string target: ""
+    command: [root.pluginDir + "/bin/omapkdex-sync", "trade-up", inputs, target]
+    stdout: StdioCollector { waitForEnd: true }
+    stderr: StdioCollector { waitForEnd: true }
+    onExited: function(code) {
+      root.tradeMessage = code === 0 ? "Trade complete: " + Balance.itemLabel(target)
+        : "Trade failed. Check available items and try again. Nothing was consumed."
       root.reloadFiles()
     }
   }
@@ -672,6 +712,8 @@ BarWidget {
     function bag(): void { root.openTab(3) }
     function shop(): void { root.openTab(4) }
     function settings(): void { root.openTab(5) }
+    function trainer(): void { root.openTab(6) }
+    function battle(): void { root.openTab(7) }
     function profile(): void { root.openProfile() }
 
     // Perfil de uma espécie qualquer do Pokédex, por número. Serve de atalho

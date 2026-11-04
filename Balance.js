@@ -62,8 +62,9 @@ function phaseThreshold(rarity, totalForms, stageIndex, difficulty, growthMultip
 }
 
 // Limiar do ovo, também sujeito à dificuldade.
-function hatchThreshold(difficulty) {
-  return Math.max(1, Math.round(EGG_HATCH_THRESHOLD * clampDifficulty(difficulty)))
+function hatchThreshold(difficulty, turboActive) {
+  var base = Math.max(1, Math.round(EGG_HATCH_THRESHOLD * clampDifficulty(difficulty)))
+  return turboActive ? Math.max(1, Math.round(base / 2)) : base
 }
 
 // Progresso dentro do estágio atual, dados os tokens acumulados desde que o
@@ -102,14 +103,17 @@ var FRESH_EGG_PRICE = 1000000000
 var BASE_PRICES = {
   mint: MINT_PRICE,
   rareCandy: RARE_CANDY_PRICE,
-  shinyCharm: SHINY_CHARM_PRICE
+  superRareCandy: 1250000000,
+  shinyCharm: SHINY_CHARM_PRICE,
+  turboIncubator: 750000000,
+  luckyClover: 6000000000
 }
 
 // Passivo: comprado uma vez, vale para sempre, não se consome.
 var PASSIVE_ITEMS = { shinyCharm: true }
 
 // Ordem em que a bag lista, independente da ordem do objeto de inventário.
-var BAG_ORDER = ["rareCandy", "mint", "shinyCharm"]
+var BAG_ORDER = ["rareCandy", "superRareCandy", "mint", "shinyCharm", "egg:", "egg:uncommon", "egg:rare", "turboIncubator", "luckyClover", "egg:legendary"]
 
 function eggPrice(tier) {
   if (!tier) return FRESH_EGG_PRICE
@@ -129,27 +133,88 @@ function shopPrice(key, shopDifficulty) {
   return Math.max(0, Math.round(base * clampDifficulty(shopDifficulty)))
 }
 
+var PACK_PRICE = 50000000
+var PACKAGE_ORDER = ["poorPackage", "fancyPackage", "legendaryPackage"]
+var ITEM_RARITIES = ["common", "uncommon", "rare", "legendary", "mythical"]
+var PACKAGES = {
+  poorPackage: { label: "Poor Package", price: 50000000, meterLimit: 2000000000, power: 1, minRarity: "common", color: "#a9a29b" },
+  fancyPackage: { label: "Fancy Package", price: 200000000, meterLimit: 3000000000, power: 0.5, minRarity: "uncommon", color: "#4a9eff" },
+  legendaryPackage: { label: "Legendary Package", price: 500000000, meterLimit: 4000000000, power: 0.25, minRarity: "rare", color: "#f5c542" }
+}
+var PACK_REWARDS = ["mint", "rareCandy", "turboIncubator", "egg:", "superRareCandy", "egg:uncommon", "luckyClover", "egg:rare", "shinyCharm", "egg:legendary"]
+
+function packReferencePrice(key) {
+  if (key === "luckyClover") return 3000000000
+  if (key === "shinyCharm") return 6000000000
+  return shopPrice(key, 1)
+}
+
+function itemRarity(key) {
+  if (key === "egg:legendary") return "mythical"
+  if (key === "luckyClover") return "rare"
+  var price = shopPrice(key, 1)
+  if (price < RARE_CANDY_PRICE) return "common"
+  if (price < FRESH_EGG_PRICE) return "uncommon"
+  if (price < SHINY_CHARM_PRICE) return "rare"
+  return "legendary"
+}
+
+function rngesusMeter(state, packageKey) {
+  var limit = PACKAGES[packageKey || "poorPackage"].meterLimit
+  var meters = state && state.rngesusMeters
+  var raw = meters ? meters[packageKey || "poorPackage"] : 0
+  var tokens = typeof raw === "number" && isFinite(raw) && Math.floor(raw) === raw
+               ? Math.max(0, Math.min(limit, raw)) : 0
+  return { tokens: tokens, limit: limit, fraction: tokens / limit, ready: tokens >= limit }
+}
+
+function packRewards(packageKey, rngesusOnly) {
+  var config = PACKAGES[packageKey || "poorPackage"]
+  var keys = PACK_REWARDS.filter(function (key) {
+    return (ITEM_RARITIES.indexOf(itemRarity(key)) >= ITEM_RARITIES.indexOf(config.minRarity))
+           && (!rngesusOnly || itemRarity(key) === "legendary" || itemRarity(key) === "mythical")
+  })
+  function weight(key) { return Math.pow(MINT_PRICE / packReferencePrice(key), config.power) }
+  var total = keys.reduce(function (sum, key) { return sum + weight(key) }, 0)
+  return keys.map(function (key) {
+    return { key: key, label: itemLabel(key), glyph: itemGlyph(key),
+             rarity: itemRarity(key), chance: weight(key) / total }
+  })
+}
+
 function availableTokens(state) {
   if (!state) return 0
   var lifetime = Number(state.lifetimeTokens) || 0
   var spent = Number(state.spentTokens) || 0
-  return Math.max(0, lifetime - spent)
+  var net = Number(state.battleNet) || 0
+  var escrows = state.battleEscrows || {}
+  var reserved = Object.keys(escrows).reduce(function (sum, key) {
+    return sum + (Number(escrows[key].amount) || 0)
+  }, 0)
+  return Math.max(0, lifetime - spent + net - reserved)
 }
 
 function itemLabel(key) {
   switch (key) {
+    case "turboIncubator": return "Turbo Incubator"
+    case "luckyClover": return "Lucky Clover"
     case "rareCandy": return "Rare Candy"
+    case "superRareCandy": return "Super Rare Candy"
     case "mint": return "Mint"
     case "shinyCharm": return "Shiny Charm"
     case "egg:": return "Egg"
     case "egg:uncommon": return "Uncommon Egg"
     case "egg:rare": return "Rare Egg"
+    case "egg:legendary": return "Legendary Egg"
     default: return key
   }
 }
 
 function itemGlyph(key) {
   switch (key) {
+    case "turboIncubator": return "⚡"
+    case "luckyClover": return "🍀"
+    case "superRareCandy": return "🍭"
     case "rareCandy": return "🍬"
     case "mint": return "🌿"
     case "shinyCharm": return "✨"
@@ -159,12 +224,16 @@ function itemGlyph(key) {
 
 function itemHint(key) {
   switch (key) {
+    case "turboIncubator": return "halves hatch tokens for the next egg"
+    case "luckyClover": return "2× shiny chance next hatch; stacks with Shiny Charm"
     case "rareCandy": return "+" + formatTokens(100000000) + " of growth"
+    case "superRareCandy": return "+" + formatTokens(250000000) + " of growth"
     case "mint": return "rerolls its nature"
     case "shinyCharm": return "shiny odds 1/64 → 1/48, forever"
-    case "egg:": return "release the current one and start over"
+    case "egg:": return "reserve for the next natural hatch"
     case "egg:uncommon": return "guarantees Uncommon or better"
     case "egg:rare": return "guarantees Rare or better"
+    case "egg:legendary": return "guarantees a Legendary Pokémon at the next natural hatch"
     default: return ""
   }
 }
@@ -212,13 +281,13 @@ function bagEntries(inventory) {
     if (passive) {
       if (inv[key] !== true) continue
       rows.push({ key: key, label: itemLabel(key), hint: itemHint(key),
-                  glyph: itemGlyph(key), count: null, passive: true,
+                  glyph: itemGlyph(key), rarity: itemRarity(key), isEgg: false, count: null, passive: true,
                   usable: false })
     } else {
       var n = Number(inv[key]) || 0
       if (n <= 0) continue
       rows.push({ key: key, label: itemLabel(key), hint: itemHint(key),
-                  glyph: itemGlyph(key), count: n, passive: false,
+                  glyph: itemGlyph(key), rarity: itemRarity(key), isEgg: key.indexOf("egg:") === 0, count: n, passive: false,
                   usable: true })
     }
   }
@@ -284,10 +353,22 @@ function formatTokens(n) {
 
 function rarityLabel(rarity) {
   switch (rarity) {
+    case "mythical": return "Mythic"
     case "legendary": return "Legendary"
     case "rare": return "Rare"
     case "uncommon": return "Uncommon"
     default: return "Common"
+  }
+}
+
+// Cor do texto do nome e da raridade. Common mantém a cor que o texto já tinha.
+function rarityColor(rarity, fallback) {
+  switch (rarity) {
+    case "mythical": return "#d987ff"
+    case "legendary": return "#f5c542"
+    case "rare": return "#4a9eff"
+    case "uncommon": return "#4cc76a"
+    default: return fallback
   }
 }
 

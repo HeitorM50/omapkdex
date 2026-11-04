@@ -20,7 +20,7 @@
   <img alt="Omarchy bar widget" src="https://img.shields.io/badge/Omarchy-bar%20widget-1b1b1f">
   <img alt="Quickshell QML" src="https://img.shields.io/badge/Quickshell-QML-1b1b1f">
   <img alt="Python 3, stdlib only" src="https://img.shields.io/badge/Python%203-stdlib%20only-1b1b1f">
-  <img alt="584 assertions" src="https://img.shields.io/badge/tests-584%20assertions-1b1b1f">
+  <img alt="Offline test suites" src="https://img.shields.io/badge/tests-offline%20suites-1b1b1f">
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-1b1b1f">
 </p>
 
@@ -133,7 +133,7 @@ along with the folder.
 
 </details>
 
-## The six tabs
+## The eight tabs
 
 <table>
 <tr>
@@ -179,6 +179,10 @@ The individuals rather than the species — every creature you raised, newest fi
 
 The tokens you already burned are currency: your wallet is the lifetime total minus what you have spent.
 
+Super Rare Candy is a Rare reward granting 250M growth without adding wallet tokens.
+
+The Shop sells **Poor (50M), Fancy (200M) and Legendary (500M) packages**. Each contains one reward and shows its rarity; higher tiers improve rare-item odds. Fancy excludes Common items; Legendary excludes Common and Uncommon items. Eggs stay in the Bag; reserve one for the next natural hatch without interrupting your current Pokémon.
+
 Filling a rate-limit window pays **Rare Candy** — the moment you hit the ceiling becomes the moment your creature grows.
 
 </td>
@@ -190,7 +194,7 @@ Filling a rate-limit window pays **Rare Candy** — the moment you hit the ceili
 
 ### ⚙️ Settings
 
-Growth difficulty and shop prices, **0.1× to 2.0×**, independently — showing what each costs in real tokens rather than just a multiplier. "150M to graduate" says something that "0.3×" does not.
+Growth difficulty, **0.1× to 2.0×** — showing what each costs in real tokens rather than just a multiplier. "150M to graduate" says something that "0.3×" does not.
 
 Changing growth **never costs you progress**: the fraction of the current stage is preserved.
 
@@ -352,6 +356,25 @@ Buying an egg **releases** your current creature: it stays in the Pokédex and
 the history with the forms it reached, but does not count as a graduation and
 does not pay the 2× bonus. The real cost is losing the progress you had banked.
 
+### Packages and RNGesus
+
+The table above lists the direct-purchase prices, still available from the CLI
+(`omapkdex-sync buy <item> <shopDifficulty>`); the Shop tab sells packages instead.
+
+**Turbo Incubator** (Uncommon) halves the next egg's hatch
+cost; **Lucky Clover** (Rare) doubles shiny chance for one hatch and
+combines with Shiny Charm. Reserve them from the Bag. See
+[the pack rules](docs/surprise-packs.md) for consumption timing and odds.
+
+The rarest pack reward is the **Legendary Egg**, a **Mythic** item. Reserve it
+from the Bag for a guaranteed Legendary species on the next natural hatch.
+Lucky Clover is Rare and more common than the permanent Legendary Shiny Charm.
+
+Each package has an independent **RNGesus Meter**: Poor fills at **2B**,
+Fancy at **3B**, Legendary at **4B** spent without a Legendary/Mythic item.
+Once full, the **following opening of that package** guarantees one of those
+rarities. Any Legendary/Mythic item resets its meter. Progress persists across updates. See [the meter rules](docs/surprise-packs.md).
+
 ## Inside a profile
 
 Nothing about an individual is stored. The IVs, the gender and the ability slot
@@ -390,7 +413,7 @@ progress — only the bar stops following, and a ★ on the sprite says so.
 
 ## Settings
 
-Growth difficulty and shop prices have sliders in the **⚙ Settings** tab. The
+Growth difficulty has a slider in the **⚙ Settings** tab. Packages cost 50M, 200M or 500M, independently of growth settings. The
 full set lives in `~/.config/omarchy/shell.json`, in the widget's entry:
 
 ```bash
@@ -401,7 +424,7 @@ omarchy bar set io.github.heitorm50.omapkdex showTokens false --json
 | Key | Default | What it does |
 |---|---|---|
 | `difficulty` | `0.3` | Multiplies growth thresholds, 0.1–2.0. Changing it rescales banked progress, so nothing evolves for free |
-| `shopDifficulty` | `1.0` | Multiplies shop prices, independent of growth |
+| `shopDifficulty` (legacy) | `1.0` | Only affects legacy direct CLI purchases; package prices are fixed at 50M/200M/500M |
 | `spriteSize` | `22` | Sprite height in the bar, in px |
 | `showTokens` | `true` | Show today's tokens next to the sprite |
 | `showLimitPercent` | `false` | Show the active short-window rate-limit percentage |
@@ -434,6 +457,20 @@ Either put the widget back, or run `omarchy-agent-usage-update` on a schedule
 of your own. Nothing is lost while a record is stale: once it is rewritten,
 OmaPkDex absorbs the whole difference in one go. (`--limits-only` reuses the
 transcript scan for up to 15 minutes, so totals can lag by that much.)
+
+## Trainer and LAN battles
+
+The **Trainer** tab adds a local name/avatar, individual Pokémon selection and
+match history. **Battle** supports Gen 5 1×1 friendly matches or explicit
+trusted-friends virtual-token stakes over TLS on the local network, with mDNS
+room discovery and manual IP connection. Existing captured Pokémon and growth
+are preserved; battle HP/PP are temporary.
+
+Install the optional pinned runtime with `node battle/setup.mjs` (Node 22+, npm
+and OpenSSL). Then select a Pokémon in Trainer and create/join a room in Battle.
+Both users compare the pairing code and accept the same rules before starting.
+
+[Setup, rules, privacy and stake recovery](docs/lan-battles.md).
 
 ## Architecture
 
@@ -497,6 +534,8 @@ down.
 ## Tests
 
 ```bash
+python3 tests/run.py       # all suites, from any checkout
+
 tests/test_collection.py   # collection and the shiny roll
 tests/test_absorb.py       # accumulation and integration, against real records
 tests/test_economy.py      # wallet, prices, candy, eggs, burn rate, rescaling
@@ -509,7 +548,7 @@ tests/test_shop.mjs        # shop list, bag, mood, bar tooltip
 tests/test_limits.mjs      # short-window selection for the compact bar
 ```
 
-**584 assertions**, none of which touch the network or your real state.
+All suites run offline against synthetic usage fixtures and temporary state; no installed plugin or personal save is required. The battle suites need the pinned simulator (`node battle/setup.mjs`); without it `tests/run.py` skips them and says so.
 
 <details>
 <summary><b>The ones that matter most</b></summary>

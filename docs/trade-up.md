@@ -1,0 +1,28 @@
+# Trade up
+
+Open **Bag → Realizar Trade Up**, choose the input rarity, click inventory tiles to add items,
+choose the output and confirm the review. Different items of the same rarity
+can be combined. The rarity tabs filter the grid to owned items only.
+Click adds one copy; right-click removes one. **Clear selection** resets the
+draft. Reserved/active items are shown as protected when no spare copies remain.
+The result is guaranteed and costs no tokens:
+
+Common → Uncommon → Rare → Legendary → Mythic.
+
+Costs: **5 Common, 4 Uncommon, 3 Rare, or 2 Legendary** items per trade.
+Each step awards one item of the next rarity. Mythic is
+the final tier. Mint can therefore become Rare Candy or Turbo Incubator;
+Legendary inputs can become a Mythic Legendary Egg.
+
+Only spare Shiny Charm duplicates can be exchanged; the active Charm remains.
+One armed/pending Lucky Clover is excluded from available quantities. Reserved
+eggs and Incubators were already removed from the Bag when reserved. Queued
+hatches and captured Pokémon are untouched.
+
+The helper revalidates the entire contract under the existing absorb/wallet
+lock and commits consumption, reward and `lastTradeUp` receipt together in
+state.json. Insufficient or stale selections fail without consuming anything.
+Trade ups do not spend tokens, grant growth or change package RNGesus meters.
+
+CLI: `bin/omapkdex-sync trade-up '{"mint":5}' rareCandy`
+Tests: `python3 tests/test_trade_up.py` (temporary synthetic saves only).

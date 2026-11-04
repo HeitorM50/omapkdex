@@ -1,0 +1,9 @@
+{
+  "modelUsage": {
+    "fixture-model": {
+      "inputTokens": 500000000,
+      "outputTokens": 0
+    }
+  },
+  "limits": []
+}

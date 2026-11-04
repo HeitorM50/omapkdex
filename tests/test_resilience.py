@@ -6,6 +6,8 @@ por lambdas que sempre funcionam — e foi essa lacuna que deixou passar o bug
 mais grave do plugin: uma falha de rede na chocagem deixava o estado afirmando
 coisas que o companion.json não sustentava.
 """
+from pathlib import Path
+
 import importlib.machinery
 import importlib.util
 import json
@@ -14,9 +16,8 @@ import shutil
 import tempfile
 import urllib.error
 
-PLUGIN = os.path.expanduser(
-    '~/.config/omarchy/plugins/io.github.heitorm50.omapkdex/bin/omapkdex-sync')
-REAL_USAGE = os.path.expanduser('~/.local/state/omarchy/agents/usage')
+PLUGIN = str(Path(__file__).resolve().parents[1] / 'bin/omapkdex-sync')
+REAL_USAGE = str(Path(__file__).resolve().parent / 'fixtures/usage')
 MODULE = 'io.github.heitorm50.omapkdex'
 
 fails = 0

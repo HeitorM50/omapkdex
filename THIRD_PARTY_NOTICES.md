@@ -61,3 +61,26 @@ This plugin reads the usage records written by the first-party `omarchy.agents`
 plugin, whose record format is documented at
 `/usr/share/omarchy/shell/plugins/agents/README.md`. It never writes to those
 records and never runs the collectors.
+
+## Surprise pack sprite
+
+`assets/parcel.png` is the pixel-art Parcel item sprite from
+[PokéAPI/sprites](https://github.com/PokeAPI/sprites/blob/master/sprites/items/parcel.png),
+downloaded 2026-11-03. Source:
+https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/parcel.png
+Pokémon artwork belongs to Nintendo / Creatures Inc. / GAME FREAK inc.;
+the plugin's MIT license does not grant rights to this artwork. The local PNG
+is animated with QML rotation and scale, without a network dependency at runtime.
+
+## Optional LAN battle runtime
+
+The battle runtime installs `@pkmn/sim` 0.10.13, an extraction of the Pokémon
+Showdown simulator, and `bonjour-service` 1.4.4. Both use the MIT license; their
+published packages retain the original licenses and copyright notices in the
+cache installation. The committed battle/package-lock.json records all
+transitive packages and integrity hashes.
+
+Sources: https://github.com/pkmn/ps/tree/main/sim and
+https://github.com/onlxltd/bonjour-service . Pokémon Showdown attribution:
+Guangcong Luo and other contributors; see the simulator package's LICENSE.
+These software licenses do not grant rights to Pokémon artwork.

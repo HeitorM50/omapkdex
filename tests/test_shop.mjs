@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url'
 // Lógica de exibição da loja e da bag.
 //
 // Carrega o Balance.js real (tirando o `.pragma library`, sintaxe de QML) para
@@ -6,10 +7,10 @@
 // que o painel usa.
 
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
-import { tmpdir, homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const PLUGIN = join(homedir(), '.config/omarchy/plugins/io.github.heitorm50.omapkdex')
+const PLUGIN = fileURLToPath(new URL('../', import.meta.url))
 
 const dir = mkdtempSync(join(tmpdir(), 'ptb-shop-'))
 const shim = join(dir, 'balance.mjs')
