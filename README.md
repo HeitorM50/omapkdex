@@ -20,7 +20,7 @@
   <img alt="Omarchy bar widget" src="https://img.shields.io/badge/Omarchy-bar%20widget-1b1b1f">
   <img alt="Quickshell QML" src="https://img.shields.io/badge/Quickshell-QML-1b1b1f">
   <img alt="Python 3, stdlib only" src="https://img.shields.io/badge/Python%203-stdlib%20only-1b1b1f">
-  <img alt="570 assertions" src="https://img.shields.io/badge/tests-570%20assertions-1b1b1f">
+  <img alt="584 assertions" src="https://img.shields.io/badge/tests-584%20assertions-1b1b1f">
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-1b1b1f">
 </p>
 
@@ -478,7 +478,7 @@ tests/test_shop.mjs        # shop list, bag, mood, bar tooltip
 tests/test_limits.mjs      # short-window selection for the compact bar
 ```
 
-**576 assertions**, none of which touch the network or your real state.
+**584 assertions**, none of which touch the network or your real state.
 
 <details>
 <summary><b>The ones that matter most</b></summary>

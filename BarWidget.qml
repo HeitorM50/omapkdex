@@ -97,7 +97,7 @@ BarWidget {
 
   readonly property real burnRate: progressState ? (progressState.burnRate || 0) : 0
   readonly property string mood: Balance.mood(progressState, todayTokens,
-                                              worstLimit ? worstLimit.percent : 0,
+                                              moodLimit ? moodLimit.percent : 0,
                                               celebration > 0 && eventFresh)
 
   // Catch log completo. O Pokédex de espécies é projeção disto (Collection.js),
@@ -169,6 +169,18 @@ BarWidget {
     var worst = null
     for (var i = 0; i < agentIds.length; i++) {
       var limit = Balance.shortestLimit(records[agentIds[i]])
+      if (limit && (!worst || limit.percent > worst.percent)) worst = limit
+    }
+    return worst
+  }
+
+  // O humor continua no pior caso entre TODAS as janelas: com a sessão de 5h
+  // em 8% e a semanal em 91%, o pet precisa ficar cansado mesmo que o texto
+  // compacto mostre só a sessão.
+  readonly property var moodLimit: {
+    var worst = null
+    for (var i = 0; i < agentIds.length; i++) {
+      var limit = Balance.tightestLimit(records[agentIds[i]])
       if (limit && (!worst || limit.percent > worst.percent)) worst = limit
     }
     return worst

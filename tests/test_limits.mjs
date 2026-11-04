@@ -31,4 +31,19 @@ equal('unknown durations retain provider order', Balance.shortestLimit({
 }).label, 'Primary')
 equal('missing limits stay absent', Balance.shortestLimit({}), null)
 
+// Rótulos reais do Codex e do Copilot, e os plurais que a regex precisa aceitar.
+equal('codex 720h window', Balance.limitDurationMinutes({ label: '720h window' }), 43200)
+equal('monthly premium requests',
+  Balance.limitDurationMinutes({ label: 'Premium requests (monthly)' }), 43200)
+equal('plural hours', Balance.limitDurationMinutes({ label: '5 hours' }), 300)
+equal('plural days', Balance.limitDurationMinutes({ label: '30 days' }), 43200)
+equal('empty limits stay absent', Balance.shortestLimit({ limits: [] }), null)
+equal('null percent is skipped', Balance.shortestLimit({
+  limits: [{ label: 'Session (5-hour)', percent: null }, weekly]
+}), weekly)
+equal('order does not matter', Balance.shortestLimit({ limits: [weekly, session] }), session)
+equal('a known window beats an unknown one', Balance.shortestLimit({
+  limits: [{ label: 'Primary', percent: 0.9 }, weekly]
+}), weekly)
+
 process.exitCode = failures ? 1 : 0

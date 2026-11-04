@@ -386,9 +386,9 @@ function tightestLimit(record) {
 function limitDurationMinutes(limit) {
   if (!limit || typeof limit !== "object") return -1
   var label = String(limit.label || limit.title || "").toLowerCase()
-  var match = label.match(/\b(\d+)\s*[- ]?h(?:our)?\b/)
+  var match = label.match(/\b(\d+)\s*[- ]?h(?:ours?)?\b/)
   if (match) return Number(match[1]) * 60
-  match = label.match(/\b(\d+)\s*[- ]?day\b/)
+  match = label.match(/\b(\d+)\s*[- ]?days?\b/)
   if (match) return Number(match[1]) * 1440
   if (label.indexOf("weekly") >= 0 || label.indexOf("week") >= 0) return 10080
   if (label.indexOf("monthly") >= 0 || label.indexOf("month") >= 0) return 43200
