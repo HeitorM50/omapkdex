@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import Quickshell
 import qs.Commons
 import qs.Ui
@@ -44,7 +45,9 @@ Panel {
     // Glifo, não palavra: os cinco rótulos já ocupam quase a largura do painel,
     // e "Settings" empurraria o quinto para fora. Uma engrenagem é a convenção
     // mais reconhecível que existe para isso.
-    { key: "settings", label: "󰒓" }
+    { key: "settings", label: "󰒓" },
+    { key: "trainer", label: "Trainer" },
+    { key: "battle", label: "Battle" }
   ]
   property int tab: 0
 
@@ -167,7 +170,7 @@ Panel {
       onTextKey: function (t) {
         if (t === "r" || t === "R") root.refresh()
         else if (t === "a" || t === "A") root.openAgents()
-        else if (t >= "1" && t <= "6") root.setTab(parseInt(t, 10) - 1)
+        else if (t >= "1" && t <= "8") root.setTab(parseInt(t, 10) - 1)
       }
 
       Column {
@@ -176,7 +179,7 @@ Panel {
         spacing: Style.space(10)
 
         // ---------- Abas ----------
-        Row {
+        Flow {
           width: parent.width
           spacing: Style.space(4)
 
@@ -240,7 +243,9 @@ Panel {
                            : root.tab === 1 ? dexComponent
                            : root.tab === 2 ? logComponent
                            : root.tab === 3 ? bagComponent
-                           : root.tab === 4 ? shopComponent : settingsComponent
+                           : root.tab === 4 ? shopComponent
+                           : root.tab === 5 ? settingsComponent
+                           : root.tab === 6 ? trainerComponent : battleComponent
         }
 
         Text {
@@ -248,7 +253,7 @@ Panel {
           textFormat: Text.PlainText
           text: root.tab === 0
                 ? "←/→ switch tab · r re-check · a open details · Esc close"
-                : "←/→ switch tab · 1-6 jump · Esc close"
+                : "←/→ switch tab · 1-8 jump · Esc close"
           color: Qt.darker(root.contentForeground, 1.8)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -321,6 +326,21 @@ Panel {
       foreground: root.contentForeground
       fontFamily: root.fontFamily
       onBuyRequested: function (key, tier) { root.buy(key, tier) }
+    }
+  }
+
+  Component {
+    id: trainerComponent
+    TrainerView { width: viewLoader.width; host: root.host; foreground: root.contentForeground; fontFamily: root.fontFamily }
+  }
+  Component {
+    id: battleComponent
+    Controls.ScrollView {
+      width: viewLoader.width
+      height: Math.min(Style.space(480), battleContent.implicitHeight)
+      contentWidth: availableWidth
+      clip: true
+      BattleView { id: battleContent; width: parent.width; host: root.host; foreground: root.contentForeground; fontFamily: root.fontFamily }
     }
   }
 

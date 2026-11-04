@@ -20,7 +20,7 @@
   <img alt="Omarchy bar widget" src="https://img.shields.io/badge/Omarchy-bar%20widget-1b1b1f">
   <img alt="Quickshell QML" src="https://img.shields.io/badge/Quickshell-QML-1b1b1f">
   <img alt="Python 3, stdlib only" src="https://img.shields.io/badge/Python%203-stdlib%20only-1b1b1f">
-  <img alt="570 assertions" src="https://img.shields.io/badge/tests-570%20assertions-1b1b1f">
+  <img alt="Offline test suites" src="https://img.shields.io/badge/tests-offline%20suites-1b1b1f">
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-1b1b1f">
 </p>
 
@@ -128,7 +128,7 @@ along with the folder.
 
 </details>
 
-## The six tabs
+## The eight tabs
 
 <table>
 <tr>
@@ -566,3 +566,18 @@ Fancy at **3B**, Legendary at **4B** spent without a Legendary/Mythic item.
 Once full, the **following opening of that package** guarantees one of those
 rarities. Any Legendary/Mythic item resets its meter. Progress persists, and
 spending starts counting from this update. See [the meter rules](docs/surprise-packs.md).
+
+## Trainer and LAN battles (validation branch)
+
+The **Trainer** tab adds a local name/avatar, individual Pokémon selection and
+match history. **Battle** supports Gen 5 1×1 friendly matches or explicit
+trusted-friends virtual-token stakes over TLS on the local network, with mDNS
+room discovery and manual IP connection. Existing captured Pokémon and growth
+are preserved; battle HP/PP are temporary.
+
+Install the optional pinned runtime with `node battle/setup.mjs` (Node 22+, npm
+and OpenSSL). Then select a Pokémon in Trainer and create/join a room in Battle.
+Both users compare the pairing code and accept the same rules before starting.
+
+[Setup, rules, privacy and stake recovery](docs/lan-battles.md). This branch is
+awaiting user validation; no new upstream PR has been created for these features.

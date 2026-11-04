@@ -184,7 +184,12 @@ function availableTokens(state) {
   if (!state) return 0
   var lifetime = Number(state.lifetimeTokens) || 0
   var spent = Number(state.spentTokens) || 0
-  return Math.max(0, lifetime - spent)
+  var net = Number(state.battleNet) || 0
+  var escrows = state.battleEscrows || {}
+  var reserved = Object.keys(escrows).reduce(function (sum, key) {
+    return sum + (Number(escrows[key].amount) || 0)
+  }, 0)
+  return Math.max(0, lifetime - spent + net - reserved)
 }
 
 function itemLabel(key) {

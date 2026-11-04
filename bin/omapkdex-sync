@@ -943,7 +943,9 @@ def available_tokens(state: dict) -> int:
     """A carteira: tudo o que já foi queimado, menos o que já foi gasto."""
     lifetime = state.get("lifetimeTokens") or 0
     spent = state.get("spentTokens") or 0
-    return max(0, int(lifetime) - int(spent))
+    escrows = state.get("battleEscrows") or {}
+    reserved = sum(int(entry.get("amount") or 0) for entry in escrows.values())
+    return max(0, int(lifetime) - int(spent) + int(state.get("battleNet") or 0) - reserved)
 
 
 def shiny_denominator(inventory: dict) -> int:
@@ -1512,7 +1514,7 @@ def cmd_sprites(argv: list[str]) -> int:
     for raw in argv:
         if not raw.isdigit():
             continue
-        path = download_sprite(int(raw))
+        path = download_sprite(int(raw), shiny="--shiny" in argv)
         log(f"{raw}: {path or 'indisponível'}")
     return 0
 

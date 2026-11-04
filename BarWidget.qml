@@ -48,6 +48,14 @@ BarWidget {
   // simplesmente não carrega — o widget não exige nenhum agente específico.
   readonly property var agentIds: ["claude", "codex", "fireworks"]
 
+  readonly property var battles: battleAgent
+  BattleAgent {
+    id: battleAgent
+    pluginDir: root.pluginDir
+    active: root.opened && root.panelLoaderTab >= 6
+  }
+  readonly property int panelLoaderTab: panelLoader.item ? panelLoader.item.tab : 0
+
   // ---- Settings
   readonly property real difficulty: Balance.clampDifficulty(setting("difficulty", 0.3))
   // Independente da de crescimento, como no original: uma é o ritmo do jogo, a
@@ -665,6 +673,8 @@ BarWidget {
     function bag(): void { root.openTab(3) }
     function shop(): void { root.openTab(4) }
     function settings(): void { root.openTab(5) }
+    function trainer(): void { root.openTab(6) }
+    function battle(): void { root.openTab(7) }
     function profile(): void { root.openProfile() }
 
     // Perfil de uma espécie qualquer do Pokédex, por número. Serve de atalho

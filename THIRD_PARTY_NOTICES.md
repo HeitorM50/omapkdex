@@ -71,3 +71,16 @@ https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/parcel.pn
 Pokémon artwork belongs to Nintendo / Creatures Inc. / GAME FREAK inc.;
 the plugin's MIT license does not grant rights to this artwork. The local PNG
 is animated with QML rotation and scale, without a network dependency at runtime.
+
+## Optional LAN battle runtime
+
+The battle runtime installs `@pkmn/sim` 0.10.13, an extraction of the Pokémon
+Showdown simulator, and `bonjour-service` 1.4.4. Both use the MIT license; their
+published packages retain the original licenses and copyright notices in the
+cache installation. The committed battle/package-lock.json records all
+transitive packages and integrity hashes.
+
+Sources: https://github.com/pkmn/ps/tree/main/sim and
+https://github.com/onlxltd/bonjour-service . Pokémon Showdown attribution:
+Guangcong Luo and other contributors; see the simulator package's LICENSE.
+These software licenses do not grant rights to Pokémon artwork.
