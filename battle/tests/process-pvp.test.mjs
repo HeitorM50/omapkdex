@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request } from '../control.mjs';
-import { Dex } from '../deps.mjs';
+import { save, teamOf } from './helpers.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url)),
   sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function wait(dir, predicate, label) {
@@ -20,37 +20,13 @@ async function wait(dir, predicate, label) {
   }
   throw Error('Timeout ' + label);
 }
-function fixture(folder, id, species, name) {
-  const dir = join(folder, 'omarchy/io.github.heitorm50.omapkdex');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(
-    join(dir, 'state.json'),
-    JSON.stringify({ lifetimeTokens: 1000000000, spentTokens: 0, hatched: true, tokensIntoStage: 777 }),
-  );
-  writeFileSync(
-    join(dir, 'collection.json'),
-    JSON.stringify({
-      entries: [
-        {
-          companionId: id,
-          speciesId: species,
-          name,
-          nature: 'hardy',
-          finalStage: 0,
-          graduatedAt: 1,
-          line: [{ id: species, name }],
-        },
-      ],
-    }),
-  );
-  return dir;
-}
+const fixture = (folder, who) => save(folder, who);
 test('two independent services complete a staked battle and recover the result after restart', async (t) => {
   const temp = mkdtempSync(join(tmpdir(), 'omapkdex-process-')),
-    aBase = join(temp, 'a'),
-    bBase = join(temp, 'b'),
-    a = fixture(aBase, 'ash', 25, 'pikachu'),
-    b = fixture(bBase, 'misty', 7, 'squirtle'),
+    aBase = join(temp, 'h'),
+    bBase = join(temp, 'g'),
+    a = fixture(temp, 'h'),
+    b = fixture(temp, 'g'),
     children = [];
   const launch = (base) => {
     const p = spawn(process.execPath, [join(root, 'service.mjs')], {
@@ -69,8 +45,8 @@ test('two independent services complete a staked battle and recover the result a
   let guest = launch(bBase);
   await wait(a, (s) => s.profile, 'host service');
   await wait(b, (s) => s.profile, 'guest service');
-  await request(a, 'profile', { displayName: 'Ash', selectedCompanionId: 'ash' });
-  await request(b, 'profile', { displayName: 'Misty', selectedCompanionId: 'misty' });
+  await request(a, 'profile', { displayName: 'Ash', team: teamOf('h') });
+  await request(b, 'profile', { displayName: 'Misty', team: teamOf('g') });
   const h = await request(a, 'host', {
     host: '127.0.0.1',
     port: 0,
@@ -88,39 +64,27 @@ test('two independent services complete a staked battle and recover the result a
   await request(b, 'ready', { trustedStakesAccepted: true });
   let sa = await wait(a, (s) => s.session?.phase === 'active', 'battle'),
     sb = await wait(b, (s) => s.session?.phase === 'active', 'battle');
-  const pick = (s) => {
-    const moves = s.session.battle.players[s.session.role].moves;
-    let result = 0,
-      best = -1;
-    for (let i = 0; i < moves.length; i++) {
-      const m = moves[i];
-      if (m.disabled || m.pp <= 0) continue;
-      const power = Dex.forGen(5).moves.get(m.id).basePower || 0;
-      if (power > best) {
-        best = power;
-        result = i;
-      }
+  // Each side answers whatever the simulator is waiting on: preview, move or replacement.
+  const answer = async (dir, s) => {
+    const me = s.session.battle.players[s.session.role];
+    if (s.session.phase !== 'active' || !me.request || s.session.waiting) return false;
+    if (me.request === 'teampreview') await request(dir, 'team', { order: '123' });
+    else if (me.request === 'switch') await request(dir, 'switch', { slot: me.team.find((m) => !m.fainted && !m.active).slot });
+    else {
+      const i = me.moves.findIndex((m) => !m.disabled && m.pp > 0);
+      await request(dir, 'move', { slot: i < 0 ? 1 : i + 1 });
     }
-    return result + 1;
+    return true;
   };
-  for (let n = 0; n < 20 && sa.session.phase !== 'finished'; n++) {
-    await request(a, 'move', { slot: pick(sa) });
-    await request(b, 'move', { slot: pick(sb) });
-    sa = await wait(
-      a,
-      (s) =>
-        s.session?.phase === 'finished' ||
-        (s.session?.phase === 'active' && s.session.battle.turn > sa.session.battle.turn),
-      'host turn',
-    );
-    sb = await wait(
-      b,
-      (s) =>
-        s.session?.phase === 'finished' ||
-        (s.session?.phase === 'active' && s.session.battle.turn === sa.session.battle.turn),
-      'guest turn',
-    );
+  for (let n = 0; n < 2000 && sa.session.phase !== 'finished'; n++) {
+    await answer(a, sa);
+    await answer(b, sb);
+    await sleep(30);
+    sa = await request(a, 'status');
+    sb = await request(b, 'status');
   }
+  sa = await wait(a, (s) => s.session?.phase === 'finished', 'host finish');
+  sb = await wait(b, (s) => s.session?.phase === 'finished', 'guest finish');
   assert.equal(sa.session.phase, 'finished');
   assert.equal(sb.session.phase, 'finished');
   assert.equal(sa.wallet.available + sb.wallet.available, 2000000000);

@@ -9,13 +9,18 @@ QtObject {
   property string error: ""
   property bool initialized: false
   property var queue: []
+  // Set by turnOn(): if the service cannot start because the runtime is missing, install it and retry.
+  property bool autoInstall: false
   readonly property bool busy: ensureProc.running || commandProc.running || setupProc.running
 
   onActiveChanged: if (active) ensure()
   function parse(raw) {
     try {
       var value = JSON.parse(String(raw || ""))
-      if (value.error) { error = value.error; return false }
+      // Uma falha de comando vem sozinha ({error}). O status completo também
+      // carrega `error` (a última falha da sessão, ex.: "Different match"), e
+      // descartá-lo deixava a UI sem dados e sem serviço até o erro sumir.
+      if (value.error && !value.profile) { error = value.error; return false }
       data = value
       return true
     } catch (e) { error = "Battle service unavailable. Install the battle runtime or try again."; return false }
@@ -38,6 +43,13 @@ QtObject {
     commandProc.payload = JSON.stringify(queue[0].args)
     commandProc.running = true
   }
+  // One action for "turn it on": start the service, installing the runtime first when needed.
+  function turnOn() {
+    if (busy || initialized) return
+    error = ""
+    autoInstall = true
+    ensureProc.running = true
+  }
   function install() { if (!busy) { error = ""; setupProc.running = true } }
 
   property Timer pollTimer: Timer {
@@ -48,7 +60,14 @@ QtObject {
     command: ["node", root.pluginDir + "/battle/cli.mjs", "ensure"]
     stdout: StdioCollector { id: ensureOut; waitForEnd: true }
     stderr: StdioCollector { waitForEnd: true }
-    onExited: function(code) { root.initialized = code === 0 && root.parse(ensureOut.text); if (root.initialized) root.pump() }
+    onExited: function(code) {
+      root.initialized = code === 0 && root.parse(ensureOut.text)
+      if (root.initialized) { root.autoInstall = false; root.pump() }
+      else if (root.autoInstall) {
+        root.autoInstall = false
+        if (/did not start|runtime missing|dependenc|Cannot find/i.test(root.error)) root.install()
+      }
+    }
   }
   property Process pollProc: Process {
     command: ["node", root.pluginDir + "/battle/cli.mjs", "status"]

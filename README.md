@@ -462,14 +462,16 @@ transcript scan for up to 15 minutes, so totals can lag by that much.)
 
 ## Trainer and LAN battles
 
-The **Trainer** tab adds a local name/avatar, individual Pokémon selection and
-match history. **Battle** supports Gen 5 1×1 friendly matches or explicit
+The **Trainer** tab adds a local name/avatar, teams of 3 to 6 captured Pokémon, move editing and
+match history. **Battle** supports Gen 5 3v3 friendly matches or explicit
 trusted-friends virtual-token stakes over TLS on the local network, with mDNS
 room discovery and manual IP connection. Existing captured Pokémon and growth
 are preserved; battle HP/PP are temporary.
 
 Install the optional pinned runtime with `node battle/setup.mjs` (Node 22+, npm
-and OpenSSL). Then select a Pokémon in Trainer and create/join a room in Battle.
+and OpenSSL). Then build a team in Trainer and create/join a room in Battle.
+Choose three at team preview; battles use real levels. Practice vs CPU,
+optional turn timers and replay viewing/export are also available.
 Both users compare the pairing code and accept the same rules before starting.
 
 [Setup, rules, privacy and stake recovery](docs/lan-battles.md).

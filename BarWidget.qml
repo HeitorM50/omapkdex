@@ -54,7 +54,7 @@ BarWidget {
   BattleAgent {
     id: battleAgent
     pluginDir: root.pluginDir
-    active: root.opened && root.panelLoaderTab >= 6
+    active: root.opened && (root.panelLoaderTab === 5 || root.panelLoaderTab === 6)
   }
   readonly property int panelLoaderTab: panelLoader.item ? panelLoader.item.tab : 0
 
@@ -713,9 +713,9 @@ BarWidget {
     function log(): void { root.openTab(2) }
     function bag(): void { root.openTab(3) }
     function shop(): void { root.openTab(4) }
-    function settings(): void { root.openTab(5) }
-    function trainer(): void { root.openTab(6) }
-    function battle(): void { root.openTab(7) }
+    function settings(): void { root.openTab(7) }
+    function trainer(): void { root.openTab(5) }
+    function battle(): void { root.openTab(6) }
     function profile(): void { root.openProfile() }
 
     // Perfil de uma espécie qualquer do Pokédex, por número. Serve de atalho
