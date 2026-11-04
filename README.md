@@ -20,7 +20,7 @@
   <img alt="Omarchy bar widget" src="https://img.shields.io/badge/Omarchy-bar%20widget-1b1b1f">
   <img alt="Quickshell QML" src="https://img.shields.io/badge/Quickshell-QML-1b1b1f">
   <img alt="Python 3, stdlib only" src="https://img.shields.io/badge/Python%203-stdlib%20only-1b1b1f">
-  <img alt="570 assertions" src="https://img.shields.io/badge/tests-570%20assertions-1b1b1f">
+  <img alt="584 assertions" src="https://img.shields.io/badge/tests-584%20assertions-1b1b1f">
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-1b1b1f">
 </p>
 
@@ -404,7 +404,7 @@ omarchy bar set io.github.heitorm50.omapkdex showTokens false --json
 | `shopDifficulty` | `1.0` | Multiplies shop prices, independent of growth |
 | `spriteSize` | `22` | Sprite height in the bar, in px |
 | `showTokens` | `true` | Show today's tokens next to the sprite |
-| `showLimitPercent` | `false` | Show the tightest rate-limit percentage |
+| `showLimitPercent` | `false` | Show the active short-window rate-limit percentage |
 | `seedFromExisting` | `false` | Count usage already recorded |
 | `representativeSpeciesId` | `0` | Species pinned to the bar; 0 follows the companion |
 | `pollSeconds` | `60` | Safety net; records are already watched by event |
@@ -506,9 +506,10 @@ tests/test_details.py      # species data: normalization, cache, REST fallback
 tests/test_dex.mjs         # the Pokédex projection, ownership, the 2× bonus
 tests/test_profile.mjs     # IVs, gender, ability, level, stats, moves
 tests/test_shop.mjs        # shop list, bag, mood, bar tooltip
+tests/test_limits.mjs      # short-window selection for the compact bar
 ```
 
-**570 assertions**, none of which touch the network or your real state.
+**584 assertions**, none of which touch the network or your real state.
 
 <details>
 <summary><b>The ones that matter most</b></summary>
