@@ -19,7 +19,7 @@
 
 ### Changed
 - Replace the plain Egg reward with Fast Hatch: reserve 2× growth for the next generation, stacking with existing growth bonuses and preserving old Egg inventory.
-- Use real Pokémon levels and battle protocol 2 for teams; both peers must update. Old 1v1 journals cannot be resumed or replayed by this engine.
+- Use real Pokémon levels and battle protocol 2 for teams; both peers must update. Old 1v1 journals cannot be resumed or replayed by this engine; a staked 1v1 match left open releases its stake through the seven-day expiry. Teams need at least three eligible Pokémon.
 - Refreshed Trainer/Battle screens, typed move controls and scrollable panel layout; Settings is the final tab.
 - Trade-up inputs use an owned-inventory grid filtered by rarity; click to add, right-click to remove, with selected counts and protected-item indicators.
 - Replace direct Shop rows with package selection; retain legacy direct-purchase CLI support and the 50M `surprisePack` alias.

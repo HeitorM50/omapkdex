@@ -113,8 +113,11 @@ played for you (first usable move, first healthy replacement, the first three at
 preview). If the opponent never chooses and is gone, after the timer plus a short
 grace period the waiting player can **claim the win**. The claim is stored in the
 journal and verified by the other peer when it reconnects (same round, and that
-peer had not chosen); it is refused while the other side can still choose. This is
-a courtesy between friends, not anti-cheat.
+peer had not chosen); it is refused while the other side can still choose. A claim
+is also refused when the opponent already committed its choice for the round, or
+has not confirmed the previous turn yet, and the claim clock restarts when this
+side's battle service starts, so time spent asleep or stopped never counts against
+the opponent. This is a courtesy between friends, not anti-cheat.
 
 **Replays:** after a match, **Watch replay** steps through the saved journal round
 by round (« Start, ‹ Prev, Next ›, End »); Trainer → Recent battles also has a
@@ -149,7 +152,8 @@ once; a conflicting replay is rejected. A reserved stake cannot be spent in the
 Shop or reserved for another match. Prepared offers persist before reservation,
 so recovery can complete the offer after a crash between the two file writes.
 
-Disconnects never auto-refund or auto-award stakes. **Reconnect saved match**
+Disconnects never auto-refund stakes, and award them only through the timeout
+claim above. **Reconnect saved match**
 uses the pinned peer identity, same seed, locked snapshots and durable turn
 journal; an address or port can be updated if needed. Moves committed before a
 restart remain committed. Result hashes cover the engine state, excluding wall
@@ -163,10 +167,11 @@ match to finish the idempotent settlement. Old match journals are retained; use
 **Recover** beside a history entry to reopen its saved room/result, coordinating
 with the other player. This also works after another room was created. Close any
 current room first. Neither peer should delete the journal or restore only one
-wallet while a stake is pending. Upstream's abandoned-reservation recovery is
-preserved: after seven days without the opponent, closing the disconnected room
-can void its local reservation without minting tokens. Before that deadline it
-refuses to release the stake.
+wallet while a stake is pending. If the opponent never returns, closing the
+disconnected room seven days after the reservation voids the local stake without
+minting tokens; before that deadline it refuses and says how many hours are left.
+A staked match saved by the older 1v1 protocol, or one that no longer replays,
+keeps its reservation visible and follows the same seven-day release.
 
 ## Local data and privacy
 

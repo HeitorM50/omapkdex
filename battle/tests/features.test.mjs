@@ -5,6 +5,7 @@ import { mkdtempSync, existsSync, readFileSync, writeFileSync, rmSync, readdirSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LanSession } from '../session.mjs';
+import { wallet } from '../wallet.mjs';
 import { MatchEngine } from '../engine.mjs';
 import { cpuTeam, decide } from '../bot.mjs';
 import { connectTLS, identity, Frames } from '../wire.mjs';
@@ -239,7 +240,7 @@ test('a finished match can be replayed step by step and exported as a Showdown l
   await assert.rejects(() => a.command('replay', { matchId: 'nope' }), /cannot be replayed/);
 });
 
-test('the team engine preserves upstream expiry for abandoned token reservations', async (t) => {
+test('abandoned token reservations expire locally after 7 days', async (t) => {
   const { aDir, a, b } = pair(t);
   await a.command('profile', { team: teamOf('h') });
   await b.command('profile', { team: teamOf('g') });
@@ -259,4 +260,74 @@ test('the team engine preserves upstream expiry for abandoned token reservations
   assert.equal(after.battleNet || 0, 0);
   assert.equal(after.lifetimeTokens, 1000000000);
   assert.equal(after.tokensIntoStage, 777);
+});
+
+const ageEscrow = (dir, matchId) => {
+  const file = join(dir, 'state.json'),
+    state = JSON.parse(readFileSync(file, 'utf8'));
+  state.battleEscrows[matchId].createdAt -= 7 * 24 * 3600 + 1;
+  writeFileSync(file, JSON.stringify(state));
+  return file;
+};
+
+test('a staked 1v1 match saved by the older protocol can still release its stake', async (t) => {
+  const { aDir } = pair(t);
+  const rules = { version: 1, mode: 'level50', stake: 5000, timer: 0 };
+  await wallet(aDir, 'reserve', { matchId: 'v1-match', amount: 5000, rulesHash: 'a'.repeat(64), opponent: 'b'.repeat(64) });
+  writeFileSync(
+    join(aDir, 'battle-session.json'),
+    JSON.stringify({ schemaVersion: 1, matchId: 'v1-match', role: 0, phase: 'active', paired: true, rules, ownOffer: { rulesHash: 'a'.repeat(64) }, turns: [], forfeits: [false, false] }),
+  );
+  const s = new LanSession(aDir, { discovery: false });
+  t.after(() => s.shutdown());
+  assert.equal(s.s.legacy, true);
+  assert.match(s.error, /older version/);
+  assert.equal((await s.status()).wallet.reserved, 5000);
+  await assert.rejects(() => s.command('resume', {}), /cannot be resumed/);
+  await assert.rejects(() => s.command('close'), /Reservation can be released/);
+  const file = ageEscrow(aDir, 'v1-match');
+  await s.command('close');
+  const after = JSON.parse(readFileSync(file, 'utf8'));
+  assert.deepEqual(after.battleEscrows, {});
+  assert.equal(after.battleNet || 0, 0);
+  assert.equal(s.s.phase, 'closed');
+});
+
+test('an opponent that already committed its choice cannot be timed out', async (t) => {
+  const { a, b } = pair(t, { claimGraceMs: 100, clockMs: 100000 });
+  await a.command('profile', { team: teamOf('h') });
+  await b.command('profile', { team: teamOf('g') });
+  await startMatch(a, b, { stake: 1000, trustedStakesAccepted: true, timer: 1 });
+  await b.command('team', { order: '123' });
+  await until(() => a.s.remoteCommit, 'opponent committed');
+  // A modified client commits, sees the opponent's reveal and withholds its own.
+  a.reveal = () => {};
+  await a.command('team', { order: '123' });
+  await until(() => a.s.remoteChoice, 'opponent revealed');
+  await b.shutdown();
+  await until(() => !a.peer, 'peer gone');
+  await sleep(1300);
+  assert.equal(a.claimable(), false, 'the opponent chose in time');
+  await assert.rejects(() => a.command('claim'), /still has time/);
+  assert.equal((await a.status()).wallet.net, 0);
+});
+
+test('the claim clock restarts with the service, not with the saved round', async (t) => {
+  const { aDir, a, b, add } = pair(t, { claimGraceMs: 100, clockMs: 100000 });
+  await a.command('profile', { team: teamOf('h') });
+  await b.command('profile', { team: teamOf('g') });
+  await startMatch(a, b, { timer: 1 });
+  await a.command('team', { order: '123' });
+  await b.shutdown();
+  await a.shutdown();
+  // The round started long ago while this side was asleep or stopped.
+  const file = join(aDir, 'battle-session.json'),
+    saved = JSON.parse(readFileSync(file, 'utf8'));
+  saved.roundAt -= 3600 * 1000;
+  writeFileSync(file, JSON.stringify(saved));
+  const back = new LanSession(aDir, { discovery: false, claimGraceMs: 100, clockMs: 100000 });
+  add(back);
+  assert.equal(back.claimable(), false, 'no claim right after a restart');
+  await sleep(1300);
+  assert.equal(back.claimable(), true);
 });

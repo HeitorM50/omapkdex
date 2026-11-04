@@ -10,8 +10,10 @@ import { request } from '../control.mjs';
 import { save, teamOf } from './helpers.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url)),
   sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function wait(dir, predicate, label) {
-  for (let n = 0; n < 100; n++) {
+// A cold service loads the simulator first; on a busy machine that alone can take
+// longer than the per-step waits below, so startup gets a wider budget.
+async function wait(dir, predicate, label, tries = 100) {
+  for (let n = 0; n < tries; n++) {
     try {
       const s = await request(dir, 'status', {}, 1500);
       if (predicate(s)) return s;
@@ -43,8 +45,8 @@ test('two independent services complete a staked battle and recover the result a
   });
   launch(aBase);
   let guest = launch(bBase);
-  await wait(a, (s) => s.profile, 'host service');
-  await wait(b, (s) => s.profile, 'guest service');
+  await wait(a, (s) => s.profile, 'host service', 600);
+  await wait(b, (s) => s.profile, 'guest service', 600);
   await request(a, 'profile', { displayName: 'Ash', team: teamOf('h') });
   await request(b, 'profile', { displayName: 'Misty', team: teamOf('g') });
   const h = await request(a, 'host', {
@@ -94,7 +96,7 @@ test('two independent services complete a staked battle and recover the result a
   guest.kill('SIGTERM');
   await new Promise((r) => guest.once('exit', r));
   guest = launch(bBase);
-  await wait(b, (s) => s.session?.phase === 'finished', 'restarted result');
+  await wait(b, (s) => s.session?.phase === 'finished', 'restarted result', 600);
   await request(b, 'resume');
   await wait(a, (s) => s.session?.phase === 'finished', 'recovery');
   sb = await wait(b, (s) => s.session?.phase === 'finished', 'recovery');

@@ -25,6 +25,25 @@ const isTurn = (t) =>
   t.actions.length === 2 &&
   t.actions.every((a) => a === null || (typeof a === 'string' && CHOICE.test(a))) &&
   /^[a-f0-9]{64}$/.test(t.hash);
+// A journal that can no longer be resumed (older protocol, or one that stopped
+// replaying) still owns a reserved stake. Keep just enough of it for closeRoom to
+// release that stake through the wallet expiry instead of hiding it forever.
+function lockedStake(s) {
+  if (!s?.rules?.stake || !s.ownOffer || s.settled || typeof s.matchId !== 'string') return null;
+  return {
+    schemaVersion: 2,
+    legacy: true,
+    matchId: s.matchId,
+    role: s.role,
+    rules: s.rules,
+    paired: true,
+    ownOffer: true,
+    phase: 'disconnected',
+    turns: [],
+    forfeits: [false, false],
+    verifiedTurns: 0,
+  };
+}
 export class LanSession extends EventEmitter {
   constructor(dir, { discovery = true, rng = Math.random, claimGraceMs = 20000, clockMs = 1000 } = {}) {
     super();
@@ -34,16 +53,22 @@ export class LanSession extends EventEmitter {
     this.trainer = new TrainerStore(dir);
     this.keys = identity(dir);
     this.file = join(dir, 'battle-session.json');
+    this.error = '';
     this.s = readJSON(this.file, null);
     // Matches saved by the 1v1 protocol cannot be replayed by the team engine.
-    if (this.s && this.s.schemaVersion !== 2) this.s = null;
+    if (this.s && this.s.schemaVersion !== 2) {
+      this.s = lockedStake(this.s);
+      if (this.s) this.error = 'A staked match from an older version cannot be resumed. Close the room to release the stake after 7 days.';
+    }
+    // The claim clock only starts once this service is up: time spent with this side
+    // asleep or stopped must not count against an opponent who was never seen late.
+    this.loadedAt = Date.now();
     this.editing = '';
     this.engine = null;
     this.peer = null;
     this.server = null;
     this.sockets = new Set();
     this.discovery = discovery ? new Discovery() : null;
-    this.error = '';
     this.queue = Promise.resolve();
     this.seq = 0;
     this.received = 0;
@@ -65,7 +90,7 @@ export class LanSession extends EventEmitter {
       this.error = 'The saved battle could not be restored: ' + e.message;
       this.engine?.destroy();
       this.engine = null;
-      this.s = null;
+      this.s = lockedStake(this.s);
     }
     this.clock = setInterval(() => this.tick(), clockMs);
     this.clock.unref();
@@ -867,6 +892,7 @@ export class LanSession extends EventEmitter {
   }
   async resume(data) {
     if (!this.s || this.peer) throw Error('No disconnected match');
+    if (this.s.legacy) throw Error('This match cannot be resumed; close the room to release its stake after 7 days');
     this.sentHash = '';
     this.s.phase = 'reconnecting';
     this.save();
@@ -895,7 +921,8 @@ export class LanSession extends EventEmitter {
     if (this.s?.rules?.stake && this.s.paired && this.s.settled && !this.s.peerSettled && this.peer)
       throw Error('Result saved locally. Wait for the opponent to confirm the settlement.');
     if (this.s?.rules?.stake && this.s.paired && !this.s.settled && !this.peer) {
-      // Preserve upstream's expiry path when an opponent never returns.
+      // The opponent is gone. After the wallet TTL the stake is voided locally, so
+      // a friend who never returns cannot lock tokens (or this room) forever.
       if (this.s.ownOffer) await wallet(this.dir, 'expire', { matchId: this.s.matchId });
       this.s.cancelled = true;
       this.s.expired = true;
@@ -1004,8 +1031,13 @@ export class LanSession extends EventEmitter {
     const needs = this.engine.needs();
     return (
       needs[1 - s.role] &&
+      // An opponent that already committed did choose in time, and one that never
+      // confirmed the previous turn may still be waiting for our reveal: either way a
+      // claim would let a side that saw the opponent's choice walk away with the stake.
+      !s.remoteCommit &&
+      s.verifiedTurns === s.turns.length &&
       (!needs[s.role] || !!s.choice) &&
-      Date.now() > s.roundAt + s.rules.timer * 1000 + this.claimGrace
+      Date.now() > Math.max(s.roundAt, this.loadedAt) + s.rules.timer * 1000 + this.claimGrace
     );
   }
   tick() {
