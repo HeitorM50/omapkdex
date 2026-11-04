@@ -444,7 +444,11 @@ Column {
     fontFamily: root.fontFamily
     dim: true
     visible: root.roster.length === 0
-    text: "No eligible Pokémon yet. Hatch your egg first; unrevealed Ditto and released Pokémon cannot battle."
+    // Sem o serviço o roster vem vazio mesmo com a coleção cheia: dizer que não há
+    // Pokémon elegível ali mandava o usuário procurar o problema no lugar errado.
+    text: root.agent && root.agent.initialized
+          ? "No eligible Pokémon yet. Hatch your egg first; unrevealed Ditto and released Pokémon cannot battle."
+          : "Turn on the battle system above to load your Pokémon. The first time, it installs the battle runtime."
   }
 
   PanelSeparator { foreground: root.foreground; visible: !!root.focused }

@@ -295,3 +295,18 @@ test('Fast Hatch increases current growth-derived battle level without touching 
   assert.ok(after > before, 'level follows the same reduced thresholds as growth');
   assert.equal(readFileSync(join(dir,'collection.json'),'utf8'),collection);
 });
+
+test('a capture saved with a numeric id from the first versions can join a team', (t) => {
+  const dir = fixture(t),
+    file = join(dir, 'collection.json'),
+    collection = JSON.parse(readFileSync(file, 'utf8'));
+  collection.entries[0].companionId = 1789347026;
+  writeFileSync(file, JSON.stringify(collection));
+  const list = roster(dir),
+    old = list.find((r) => r.companionId === '1789347026');
+  assert.equal(list.length, 4);
+  assert.ok(old, 'the numeric capture is listed with a string id');
+  assert.equal(readFileSync(file, 'utf8'), JSON.stringify(collection), 'the collection is not rewritten');
+  const snaps = teamSnapshots(dir, [{ companionId: '1789347026' }, { companionId: 'caught-c' }, { companionId: 'caught-d' }]);
+  assert.equal(snaps[0].companionId, '1789347026');
+});

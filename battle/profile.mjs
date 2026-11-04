@@ -117,19 +117,23 @@ export function roster(dir) {
     state = readJSON(join(dir, 'state.json'), {}),
     comp = readJSON(join(dir, 'companion.json'), null);
   return C.entriesOf(col)
+    // Captures from the first versions stored the id as a number; the team, the wire
+    // and the snapshots all use strings, and seedFor() already hashes String(id), so
+    // the individual (IVs, ability) stays the same.
+    .map((e) => (Number.isSafeInteger(e.companionId) ? { ...e, companionId: String(e.companionId) } : e))
     .filter(
       (e) =>
         typeof e.companionId === 'string' &&
         e.companionId.length > 0 &&
         !e.releasedAt &&
         !(e.dittoDisguise && !e.dittoRevealed) &&
-        !(e.companionId === comp?.companionId && !state.hatched),
+        !(e.companionId === String(comp?.companionId) && !state.hatched),
     )
     .map((e) => {
       const forms = C.speciesReached(e),
         form = forms.at(-1);
       if (!form) return null;
-      const current = e.companionId === comp?.companionId && !e.graduatedAt;
+      const current = e.companionId === String(comp?.companionId) && !e.graduatedAt;
       const entry = { ...e, nature: current ? comp.nature : e.nature };
       const species = dex.species.get(form.name);
       if (!species.exists || species.num !== form.id || species.gen > 5) return null;
