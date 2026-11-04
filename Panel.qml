@@ -314,6 +314,7 @@ Panel {
       tokensIntoStage: root.host ? root.host.tokensIntoStage : 0
       difficulty: root.host ? root.host.difficulty : 1.0
       growthBoost: root.host ? root.host.growthBoost === true : false
+      growthMultiplier: root.host ? root.host.growthMultiplier || 1 : 1
       foreground: root.contentForeground
       fontFamily: root.fontFamily
       onPinRequested: function (speciesId) { root.pin(speciesId) }

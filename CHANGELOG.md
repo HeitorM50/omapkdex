@@ -18,6 +18,7 @@
 - Offline, checkout-relative test runner and synthetic usage fixtures.
 
 ### Changed
+- Replace the plain Egg reward with Fast Hatch: reserve 2× growth for the next generation, stacking with existing growth bonuses and preserving old Egg inventory.
 - Use real Pokémon levels and battle protocol 2 for teams; both peers must update. Old 1v1 journals cannot be resumed or replayed by this engine.
 - Refreshed Trainer/Battle screens, typed move controls and scrollable panel layout; Settings is the final tab.
 - Trade-up inputs use an owned-inventory grid filtered by rarity; click to add, right-click to remove, with selected counts and protected-item indicators.

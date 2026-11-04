@@ -33,6 +33,7 @@ Column {
   property real tokensIntoStage: 0
   property real difficulty: 1.0
   property bool growthBoost: false
+  property real growthMultiplier: growthBoost ? 2 : 1
 
   property int representativeSpeciesId: 0
   property color foreground: Color.foreground
@@ -57,7 +58,7 @@ Column {
   // para o vivo eles importam, porque tokensIntoStage é absoluto.
   function thresholdsFor(ind) {
     var forms = Math.max(1, ind.lineLength)
-    var mult = (ind.current && root.growthBoost) ? 2 : 1
+    var mult = ind.current ? root.growthMultiplier : 1
     var out = []
     for (var i = 0; i < forms; i++)
       out.push(Balance.phaseThreshold(ind.rarity, forms, i, root.difficulty, mult))

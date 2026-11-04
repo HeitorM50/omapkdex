@@ -105,6 +105,8 @@ BarWidget {
     return Collection.hasGraduatedLine(collection, companion.baseSpeciesId)
   }
 
+  readonly property real growthMultiplier: Balance.growthMultiplier(progressState, growthBoost)
+
   readonly property real burnRate: progressState ? (progressState.burnRate || 0) : 0
   readonly property string mood: Balance.mood(progressState, todayTokens,
                                               moodLimit ? moodLimit.percent : 0,
@@ -159,8 +161,8 @@ BarWidget {
   // Pokémon evolui com ela pela metade.
   readonly property var progress: Balance.progress(rarity, totalForms, stage,
                                                    tokensIntoStage, difficulty,
-                                                   growthBoost ? 2 : 1)
-  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty, progressState && progressState.turboIncubatorActive)
+                                                   growthMultiplier)
+  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty, progressState && progressState.turboIncubatorActive, progressState && progressState.fastHatchActive)
 
   readonly property real todayTokens: {
     var total = 0

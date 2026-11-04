@@ -30,6 +30,7 @@ Column {
   property real tokensIntoStage: 0
   property real difficulty: 1.0
   property bool growthBoost: false
+  property real growthMultiplier: growthBoost ? 2 : 1
 
   signal pinRequested(int speciesId)
   signal detailsRequested(int speciesId)
@@ -369,6 +370,7 @@ Column {
       tokensIntoStage: root.tokensIntoStage
       difficulty: root.difficulty
       growthBoost: root.growthBoost
+      growthMultiplier: root.growthMultiplier
       representativeSpeciesId: root.representativeSpeciesId
       foreground: root.foreground
       fontFamily: root.fontFamily

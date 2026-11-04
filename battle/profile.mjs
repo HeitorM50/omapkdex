@@ -139,7 +139,7 @@ export function roster(dir) {
           e.line.length,
           i,
           state.difficulty || 1,
-          current && C.hasGraduatedLine(col, e.speciesId) ? 2 : 1,
+          current ? B.growthMultiplier(state, C.hasGraduatedLine(col, e.speciesId)) : 1,
         ),
       );
       const level = P.levelFor({

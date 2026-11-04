@@ -275,3 +275,23 @@ test('the opponent threat arrow comes from public information only: its types an
   assert.equal(v.players[1].threat, 2);
   assert.equal(v.players[1].threatBy, 'Twister');
 });
+
+
+test('Fast Hatch increases current growth-derived battle level without touching captures', (t) => {
+  const dir = fixture(t);
+  const collectionFile=join(dir,'collection.json');
+  const captured=JSON.parse(readFileSync(collectionFile,'utf8'));
+  captured.entries[0].graduatedAt=null;
+  writeFileSync(collectionFile,JSON.stringify(captured));
+  const comp = {companionId:'caught-a',baseSpeciesId:25,nature:'adamant'};
+  writeFileSync(join(dir,'companion.json'),JSON.stringify(comp));
+  const file = join(dir,'state.json');
+  const state = {hatched:true,stage:0,tokensIntoStage:100000000,difficulty:1};
+  writeFileSync(file,JSON.stringify(state));
+  const before = roster(dir).find(r=>r.companionId==='caught-a').level;
+  const collection = readFileSync(join(dir,'collection.json'),'utf8');
+  writeFileSync(file,JSON.stringify({...state,fastHatchActive:true}));
+  const after = roster(dir).find(r=>r.companionId==='caught-a').level;
+  assert.ok(after > before, 'level follows the same reduced thresholds as growth');
+  assert.equal(readFileSync(join(dir,'collection.json'),'utf8'),collection);
+});

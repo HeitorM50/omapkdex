@@ -16,7 +16,7 @@ Legendary inputs can become a Mythic Legendary Egg.
 
 Only spare Shiny Charm duplicates can be exchanged; the active Charm remains.
 One armed/pending Lucky Clover is excluded from available quantities. Reserved
-eggs and Incubators were already removed from the Bag when reserved. Queued
+Fast Hatch, special eggs and Incubators were already removed from the Bag when reserved. Queued
 hatches and captured Pokémon are untouched.
 
 The helper revalidates the entire contract under the existing absorb/wallet

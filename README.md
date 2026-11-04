@@ -182,6 +182,7 @@ The individuals rather than the species — every creature you raised, newest fi
 The tokens you already burned are currency: your wallet is the lifetime total minus what you have spent.
 
 Super Rare Candy is a Rare reward granting 250M growth without adding wallet tokens.
+Fast Hatch replaces the plain Egg: reserve it for 2× growth throughout the next generation; existing Egg copies keep working.
 
 The Shop sells **Poor (50M), Fancy (200M) and Legendary (500M) packages**. Each contains one reward and shows its rarity; higher tiers improve rare-item odds. Fancy excludes Common items; Legendary excludes Common and Uncommon items. Eggs stay in the Bag; reserve one for the next natural hatch without interrupting your current Pokémon.
 

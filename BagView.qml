@@ -25,6 +25,7 @@ Column {
 
   function reserved(key) {
     var s = progressState || {}
+    if (key === "egg:") return !!(s.fastHatchQueued || s.queuedEgg === "egg:")
     if (key === "turboIncubator") return !!s.turboIncubatorQueued
     if (key === "luckyClover") return !!(s.luckyCloverArmed || s.luckyCloverPending)
     return false
@@ -82,6 +83,8 @@ Column {
     text: {
       var s = root.progressState || {}
       var lines = []
+      if (s.fastHatchQueued || s.queuedEgg === "egg:") lines.push("Fast Hatch reserved · next generation grows 2× faster")
+      if (s.fastHatchActive) lines.push("Fast Hatch active · 2× growth until graduation")
       if (s.turboIncubatorQueued) lines.push("Turbo Incubator reserved for the next egg")
       if (s.turboIncubatorActive) lines.push("Turbo Incubator active · ½ hatch tokens")
       if (s.luckyCloverArmed || s.luckyCloverPending) lines.push("Lucky Clover reserved · 2× shiny chance")
@@ -106,7 +109,7 @@ Column {
       // Candy sem Pokémon chocado não tem onde ser aplicada; o helper recusaria.
       readonly property bool usable: modelData.usable && !root.reserved(modelData.key) && (modelData.isEgg
         ? !(root.progressState && root.progressState.queuedEgg)
-        : (modelData.key === "turboIncubator" || modelData.key === "luckyClover" || root.hatched))
+        : (modelData.key === "egg:" || modelData.key === "turboIncubator" || modelData.key === "luckyClover" || root.hatched))
 
       Rectangle {
         anchors.fill: parent
@@ -159,7 +162,7 @@ Column {
             if (row.modelData.passive) return prefix + "active — " + row.modelData.hint
               + (root.inventory.shinyCharmDuplicates ? " · " + root.inventory.shinyCharmDuplicates + " duplicates" : "")
             if (root.reserved(row.modelData.key)) return prefix + "reserved for next hatch"
-            if (!root.hatched && row.modelData.key !== "turboIncubator" && row.modelData.key !== "luckyClover") return "wait for the egg to hatch"
+            if (!root.hatched && row.modelData.key !== "egg:" && row.modelData.key !== "turboIncubator" && row.modelData.key !== "luckyClover") return "wait for the egg to hatch"
             return prefix + row.modelData.hint
           }
           color: Qt.darker(root.foreground, 1.6)
@@ -177,7 +180,7 @@ Column {
         anchors.verticalCenter: parent.verticalCenter
         visible: !row.modelData.passive
         textFormat: Text.PlainText
-        text: root.reserved(row.modelData.key) ? "reserved" : (row.modelData.isEgg || row.modelData.key === "turboIncubator" || row.modelData.key === "luckyClover" ? "reserve" : "use")
+        text: root.reserved(row.modelData.key) ? "reserved" : (row.modelData.isEgg || row.modelData.key === "egg:" || row.modelData.key === "turboIncubator" || row.modelData.key === "luckyClover" ? "reserve" : "use")
         color: row.usable ? root.foreground : Qt.darker(root.foreground, 1.9)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
