@@ -292,6 +292,17 @@ BarWidget {
     useProc.running = true
   }
 
+  readonly property bool tradeBusy: tradeProc.running
+  property string tradeMessage: ""
+
+  function tradeUp(inputs, target) {
+    if (tradeProc.running) return
+    tradeMessage = ""
+    tradeProc.inputs = JSON.stringify(inputs)
+    tradeProc.target = target
+    tradeProc.running = true
+  }
+
   // Fixar é preferência, não progresso, então vive nas settings do widget
   // (shell.json) e não no state.json — é o mesmo critério do original, que as
   // guarda em UserDefaults e não no save.
@@ -602,6 +613,20 @@ BarWidget {
     stderr: StdioCollector { waitForEnd: true }
     onExited: function (code) {
       if (code !== 0) console.warn(root.moduleName, "uso recusado:", useProc.key)
+      root.reloadFiles()
+    }
+  }
+
+  Process {
+    id: tradeProc
+    property string inputs: "{}"
+    property string target: ""
+    command: [root.pluginDir + "/bin/omapkdex-sync", "trade-up", inputs, target]
+    stdout: StdioCollector { waitForEnd: true }
+    stderr: StdioCollector { waitForEnd: true }
+    onExited: function(code) {
+      root.tradeMessage = code === 0 ? "Trade complete: " + Balance.itemLabel(target)
+        : "Trade failed. Check available items and try again. Nothing was consumed."
       root.reloadFiles()
     }
   }

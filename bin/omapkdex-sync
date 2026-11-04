@@ -927,6 +927,61 @@ def buy_pack(package: str = "poorPackage") -> int:
     return 0 if _with_state_lock(apply) else 1
 
 
+TRADE_RARITIES = ("common", "uncommon", "rare", "legendary", "mythical")
+
+
+def trade_available(state: dict, key: str) -> int:
+    inventory = state.get("inventory", {})
+    field = "shinyCharmDuplicates" if key == "shinyCharm" else key
+    value = inventory.get(field, 0)
+    count = value if type(value) is int and value > 0 else 0
+    if key == "luckyClover" and (state.get("luckyCloverArmed") or state.get("luckyCloverPending")):
+        count -= 1  # Clover is consumed at hatch, unlike the other queued items.
+    return max(0, count)
+
+
+def cmd_trade_up(argv: list[str]) -> int:
+    """Ten unreserved items of one tier for a chosen item of the next tier."""
+    if len(argv) != 2 or len(argv[0]) > 4096:
+        return 1
+    try:
+        inputs = json.loads(argv[0])
+    except (ValueError, TypeError):
+        return 1
+    target = argv[1]
+    if (not isinstance(inputs, dict) or not inputs or target not in PACK_REWARDS
+            or any(key not in PACK_REWARDS or type(n) is not int or n <= 0 or n > 10
+                   for key, n in inputs.items()) or sum(inputs.values()) != 10):
+        return 1
+    tiers = {item_rarity(key) for key in inputs}
+    if len(tiers) != 1:
+        return 1
+    tier = tiers.pop()
+    rank = TRADE_RARITIES.index(tier)
+    if rank >= len(TRADE_RARITIES) - 1 or item_rarity(target) != TRADE_RARITIES[rank + 1]:
+        return 1
+
+    def apply(state):
+        if any(trade_available(state, key) < n for key, n in inputs.items()):
+            return False
+        inventory = state.setdefault("inventory", {})
+        for key, n in inputs.items():
+            field = "shinyCharmDuplicates" if key == "shinyCharm" else key
+            inventory[field] -= n
+        if target == "shinyCharm":
+            if inventory.get(target):
+                inventory["shinyCharmDuplicates"] = int(inventory.get("shinyCharmDuplicates") or 0) + 1
+            inventory[target] = True
+        else:
+            inventory[target] = int(inventory.get(target) or 0) + 1
+        state["lastTradeUp"] = {"id": uuid.uuid4().hex, "inputs": inputs,
+                                "key": target, "rarity": item_rarity(target),
+                                "createdAt": int(time.time())}
+        return True
+
+    return 0 if _with_state_lock(apply) else 1
+
+
 def effective_hatch_threshold(state: dict, difficulty: float) -> int:
     base = hatch_threshold(difficulty)
     return max(1, round(base / 2)) if state.get("turboIncubatorActive") else base
@@ -2058,7 +2113,7 @@ def cmd_use(argv: list[str]) -> int:
 
 COMMANDS = {"hatch": cmd_hatch, "sprites": cmd_sprites,
             "index": cmd_index, "absorb": cmd_absorb,
-            "buy": cmd_buy, "use": cmd_use, "details": cmd_details}
+            "buy": cmd_buy, "trade-up": cmd_trade_up, "use": cmd_use, "details": cmd_details}
 
 
 def main(argv: list[str]) -> int:

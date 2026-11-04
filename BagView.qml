@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Balance.js" as Balance
 
@@ -11,7 +12,7 @@ Column {
   id: root
 
   property var host: null
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
 
   signal useRequested(string key)
@@ -40,6 +41,17 @@ Column {
     font.pixelSize: Style.font.caption
   }
 
+  TradeUpView {
+    id: tradeUp
+    width: parent.width
+    host: root.host
+    foreground: root.foreground
+  }
+
+  Column {
+    width: parent.width
+    visible: !tradeUp.expanded
+    spacing: root.spacing
   Text {
     width: parent.width
     visible: root.rows.length === 0
@@ -178,5 +190,6 @@ Column {
         onTapped: root.useRequested(row.modelData.key)
       }
     }
+  }
   }
 }
