@@ -17,6 +17,7 @@ Column {
   readonly property bool busy: host ? host.tradeBusy === true : false
   readonly property var inputs: Balance.PACK_REWARDS.filter(function(k) { return Balance.itemRarity(k) === root.tiers[root.tierIndex] })
   readonly property var outputs: Balance.PACK_REWARDS.filter(function(k) { return Balance.itemRarity(k) === root.tiers[root.tierIndex + 1] })
+  readonly property int requiredCount: [5, 4, 3, 2][tierIndex]
   readonly property int total: Object.keys(selected).reduce(function(n, k) { return n + root.selected[k] }, 0)
   spacing: Style.space(6)
 
@@ -28,7 +29,7 @@ Column {
   }
   function adjust(key, delta) {
     var next = Object.assign({}, selected)
-    next[key] = Math.max(0, Math.min(available(key), (next[key] || 0) + delta, 10 - total + (next[key] || 0)))
+    next[key] = Math.max(0, Math.min(available(key), (next[key] || 0) + delta, requiredCount - total + (next[key] || 0)))
     if (!next[key]) delete next[key]
     selected = next
   }
@@ -44,7 +45,7 @@ Column {
   BattleButton {
     width: parent.width
     foreground: root.foreground
-    text: root.expanded ? "← Back to items" : "Trade up · 10 items → 1 upgraded item"
+    text: root.expanded ? "← Back to items" : "Realizar Trade Up"
     enabled: !root.busy
     onClicked: { root.expanded = !root.expanded; root.reset() }
   }
@@ -61,7 +62,7 @@ Column {
       spacing: Style.space(6)
     Text {
       width: parent.width
-      text: "Trade 10 items of the same rarity for one chosen item of the next rarity. No token cost. Reserved items and your active Charm are protected."
+      text: "Trade " + root.requiredCount + " items of the same rarity for one chosen item of the next rarity. No token cost. Reserved items and your active Charm are protected."
       textFormat: Text.PlainText
       wrapMode: Text.WordWrap
       color: root.foreground
@@ -102,11 +103,11 @@ Column {
         }
         BattleButton { width: Style.space(28); text: "−"; Accessible.name: "Remove " + parent.modelData; enabled: !root.busy && (root.selected[parent.modelData] || 0) > 0; onClicked: root.adjust(parent.modelData, -1) }
         Text { width: Style.space(20); height: Style.space(34); verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; text: root.selected[parent.modelData] || 0; color: root.foreground }
-        BattleButton { width: Style.space(28); text: "+"; Accessible.name: "Add " + parent.modelData; enabled: !root.busy && root.total < 10 && (root.selected[parent.modelData] || 0) < root.available(parent.modelData); onClicked: root.adjust(parent.modelData, 1) }
+        BattleButton { width: Style.space(28); text: "+"; Accessible.name: "Add " + parent.modelData; enabled: !root.busy && root.total < root.requiredCount && (root.selected[parent.modelData] || 0) < root.available(parent.modelData); onClicked: root.adjust(parent.modelData, 1) }
       }
     }
     Text {
-      text: root.total + "/10 selected · Choose your guaranteed " + Balance.rarityLabel(root.tiers[root.tierIndex + 1]) + ":"
+      text: root.total + "/" + root.requiredCount + " selected · Choose your guaranteed " + Balance.rarityLabel(root.tiers[root.tierIndex + 1]) + ":"
       width: parent.width
       wrapMode: Text.WordWrap
       color: root.foreground
@@ -130,8 +131,8 @@ Column {
     BattleButton {
       width: parent.width
       foreground: root.foreground
-      text: root.busy ? "Trading…" : "Review trade up"
-      enabled: !root.busy && root.total === 10 && !!root.target
+      text: root.busy ? "Trading…" : "Realizar Trade Up"
+      enabled: !root.busy && root.total === root.requiredCount && !!root.target
       onClicked: confirmation.open()
     }
   }
@@ -154,10 +155,10 @@ Column {
     standardButtons: Controls.Dialog.Yes | Controls.Dialog.No
     contentItem: Text {
       text: Object.keys(root.selected).map(function(k) { return root.selected[k] + "× " + Balance.itemLabel(k) }).join("\n")
-            + "\n\nReceive: 1× " + Balance.itemLabel(root.target) + "\n\nThe 10 selected items will be consumed."
+            + "\n\nReceive: 1× " + Balance.itemLabel(root.target) + "\n\nThe " + root.requiredCount + " selected items will be consumed."
       textFormat: Text.PlainText
       wrapMode: Text.WordWrap
     }
-    onAccepted: { if (root.host && root.total === 10 && root.target) root.host.tradeUp(root.selected, root.target) }
+    onAccepted: { if (root.host && root.total === root.requiredCount && root.target) root.host.tradeUp(root.selected, root.target) }
   }
 }

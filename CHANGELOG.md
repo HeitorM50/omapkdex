@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- Bag trade-up contracts: exchange 10 unreserved items of one rarity for a chosen item of the next rarity, with confirmation and atomic inventory updates.
+- Bag trade-up contracts: exchange 5 Common, 4 Uncommon, 3 Rare or 2 Legendary unreserved items for a chosen item of the next rarity, with confirmation and atomic inventory updates.
 - Local Trainer profile, avatar, per-individual battle selection and match history.
 - Pinned Gen 5 battle simulator, paired TLS LAN rooms, mDNS discovery and manual address connection.
 - Committed simultaneous turns, restart/reconnect replay and archived-result recovery.

@@ -928,6 +928,7 @@ def buy_pack(package: str = "poorPackage") -> int:
 
 
 TRADE_RARITIES = ("common", "uncommon", "rare", "legendary", "mythical")
+TRADE_COSTS = {"common": 5, "uncommon": 4, "rare": 3, "legendary": 2}
 
 
 def trade_available(state: dict, key: str) -> int:
@@ -941,7 +942,7 @@ def trade_available(state: dict, key: str) -> int:
 
 
 def cmd_trade_up(argv: list[str]) -> int:
-    """Ten unreserved items of one tier for a chosen item of the next tier."""
+    """Exchange the tier-specific quantity for a chosen next-tier item."""
     if len(argv) != 2 or len(argv[0]) > 4096:
         return 1
     try:
@@ -950,15 +951,17 @@ def cmd_trade_up(argv: list[str]) -> int:
         return 1
     target = argv[1]
     if (not isinstance(inputs, dict) or not inputs or target not in PACK_REWARDS
-            or any(key not in PACK_REWARDS or type(n) is not int or n <= 0 or n > 10
-                   for key, n in inputs.items()) or sum(inputs.values()) != 10):
+            or any(key not in PACK_REWARDS or type(n) is not int or n <= 0 or n > max(TRADE_COSTS.values())
+                   for key, n in inputs.items())):
         return 1
     tiers = {item_rarity(key) for key in inputs}
     if len(tiers) != 1:
         return 1
     tier = tiers.pop()
     rank = TRADE_RARITIES.index(tier)
-    if rank >= len(TRADE_RARITIES) - 1 or item_rarity(target) != TRADE_RARITIES[rank + 1]:
+    if (sum(inputs.values()) != TRADE_COSTS.get(tier)
+            or rank >= len(TRADE_RARITIES) - 1
+            or item_rarity(target) != TRADE_RARITIES[rank + 1]):
         return 1
 
     def apply(state):

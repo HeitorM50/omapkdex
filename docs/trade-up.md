@@ -1,12 +1,13 @@
 # Trade up
 
-Open **Bag → Trade up**, choose the input rarity, add 10 items using +/−,
+Open **Bag → Realizar Trade Up**, choose the input rarity, add items using +/−,
 choose the output and confirm the review. Different items of the same rarity
 can be combined. The result is guaranteed and costs no tokens:
 
 Common → Uncommon → Rare → Legendary → Mythic.
 
-Each step consumes 10 items and awards one item of the next rarity. Mythic is
+Costs: **5 Common, 4 Uncommon, 3 Rare, or 2 Legendary** items per trade.
+Each step awards one item of the next rarity. Mythic is
 the final tier. Mint can therefore become Rare Candy or Turbo Incubator;
 Legendary inputs can become a Mythic Legendary Egg.
 
@@ -20,5 +21,5 @@ lock and commits consumption, reward and `lastTradeUp` receipt together in
 state.json. Insufficient or stale selections fail without consuming anything.
 Trade ups do not spend tokens, grant growth or change package RNGesus meters.
 
-CLI: `bin/omapkdex-sync trade-up '{"mint":10}' rareCandy`
+CLI: `bin/omapkdex-sync trade-up '{"mint":5}' rareCandy`
 Tests: `python3 tests/test_trade_up.py` (temporary synthetic saves only).
