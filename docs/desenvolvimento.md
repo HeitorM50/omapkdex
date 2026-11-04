@@ -49,6 +49,12 @@ eleger um escritor pelo lado do QML. A mutação vive no helper, atrás de um
 Se você for tentado a escrever estado do QML — não. Adicione um subcomando ao
 helper.
 
+A exceção controlada é `bin/omapkdex-battle-wallet` (reserva, liquidação e
+expiração de stakes das batalhas LAN). Ele não tem lógica de escrita própria:
+carrega o `omapkdex-sync` como módulo e escreve só por `_with_state_lock`, o
+mesmo `flock` e a mesma escrita atômica do `absorb`. Qualquer novo escritor
+precisa seguir esse caminho.
+
 ### 2. A regra de progressão existe em um lugar só
 
 A mutação (acumular deltas, avançar estágios, graduar) é do Python, em
@@ -150,8 +156,10 @@ rede — em vez de estourar.
 
 ### 7. O XP da candy não entra na carteira
 
-A carteira é `lifetimeTokens − spentTokens`. Somar o XP da Rare Candy ao
-`lifetimeTokens` faria de cada candy uma máquina de dinheiro. O XP vai **só**
+A carteira é `lifetimeTokens − spentTokens + battleNet − stakes reservados`
+(`battleEscrows`). `battleNet` só muda na liquidação de uma batalha com stake,
+e é soma zero entre os dois jogadores. Somar o XP da Rare Candy (ou da Super
+Rare Candy) ao `lifetimeTokens` faria de cada candy uma máquina de dinheiro. O XP vai **só**
 para `tokensIntoStage`, e não é escalado pela dificuldade (escalar os dois se
 cancelaria). `tests/test_economy.py` abre com esse caso.
 

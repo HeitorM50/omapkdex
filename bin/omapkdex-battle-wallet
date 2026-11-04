@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 import sys
 import time
+# A reservation whose peer never comes back can be voided locally after this long.
+ESCROW_TTL=7*24*3600
 loader=importlib.machinery.SourceFileLoader('wallet_sync',str(Path(__file__).with_name('omapkdex-sync')))
 spec=importlib.util.spec_from_loader(loader.name,loader)
 sync=importlib.util.module_from_spec(spec);loader.exec_module(sync)
@@ -16,7 +18,7 @@ def check_hash(value):
  return value
 
 def main(op,data):
- if op not in ('status','reserve','settle'):raise ValueError('Unknown wallet operation')
+ if op not in ('status','reserve','settle','expire'):raise ValueError('Unknown wallet operation')
  if op=='status':return summary(sync.load_state())
  match_id=data.get('matchId')
  if not isinstance(match_id,str) or not re.fullmatch('[-a-zA-Z0-9_]{1,80}',match_id):raise ValueError('Invalid match ID')
@@ -32,6 +34,16 @@ def main(op,data):
     return True
    if sync.available_tokens(state)<amount:raise ValueError('Insufficient available tokens')
    escrows[match_id]={**entry,'createdAt':int(time.time())}
+  elif op=='expire':
+   if match_id in settled:
+    if settled[match_id].get('expired'):return True
+    raise ValueError('Match already settled; resume it to finish')
+   if match_id not in escrows:raise ValueError('No reservation for this match')
+   left=int(escrows[match_id].get('createdAt') or 0)+ESCROW_TTL-int(time.time())
+   if left>0:raise ValueError(f'Reservation can be released in {(left+3599)//3600}h if the opponent does not return')
+   amount=escrows[match_id]['amount']
+   settled[match_id]={'outcome':'void','amount':amount,'resultHash':'0'*64,'expired':True,'settledAt':int(time.time())}
+   del escrows[match_id]
   else:
    outcome=data.get('outcome');digest=check_hash(data.get('resultHash'))
    if outcome not in ('win','loss','draw','void'):raise ValueError('Invalid outcome')

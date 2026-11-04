@@ -47,7 +47,7 @@ Column {
   }
   Text {
     width: parent.width; visible: stake.value > 0
-    text: "Local saves can be edited. A stake stays reserved after a disconnect until both peers agree on the result. No provider credits or real money."
+    text: "Local saves can be edited. A stake stays reserved after a disconnect until both peers agree on the result, or for 7 days if the opponent never returns. No provider credits or real money."
     textFormat: Text.PlainText; wrapMode: Text.WordWrap
     color: Commons.Color.urgent; font.pixelSize: Style.font.caption; font.family: Style.font.family
   }

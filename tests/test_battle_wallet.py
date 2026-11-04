@@ -39,5 +39,15 @@ class Wallet(unittest.TestCase):
   self.call('settle',matchId='shop-race',outcome='draw',resultHash='c'*64)
   r=subprocess.run(command,env=self.env,capture_output=True,text=True);self.assertEqual(r.returncode,0)
   state=json.loads(self.file.read_text());self.assertEqual(state['inventory']['rareCandy'],1);self.assertEqual(state['tokensIntoStage'],321)
+ def test_stale_reservation_expires_locally_without_minting(self):
+  self.call('reserve',matchId='gone',amount=300,rulesHash='a'*64,opponent='b'*64)
+  r,_=self.call('expire',matchId='gone');self.assertNotEqual(r.returncode,0)
+  state=json.loads(self.file.read_text());state['battleEscrows']['gone']['createdAt']-=7*24*3600+1;self.file.write_text(json.dumps(state))
+  r,d=self.call('expire',matchId='gone');self.assertEqual(r.returncode,0);self.assertEqual(d['available'],900);self.assertEqual(d['net'],0)
+  r,_=self.call('expire',matchId='gone');self.assertEqual(r.returncode,0)
+  r,_=self.call('settle',matchId='gone',outcome='win',resultHash='c'*64);self.assertNotEqual(r.returncode,0)
+  self.call('reserve',matchId='done',amount=100,rulesHash='a'*64,opponent='b'*64)
+  self.call('settle',matchId='done',outcome='loss',resultHash='c'*64)
+  r,_=self.call('expire',matchId='done');self.assertNotEqual(r.returncode,0)
 
 if __name__=='__main__':unittest.main()

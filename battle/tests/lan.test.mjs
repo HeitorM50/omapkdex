@@ -269,4 +269,15 @@ test('a crash after reserving funds recovers the prepared offer without a second
   assert.equal(controller.s.reservationIntent, undefined);
   assert.equal(result.wallet.reserved, 1000);
   await assert.rejects(() => controller.command('close'));
+  // After the TTL a missing opponent no longer locks the stake or the room.
+  const file = join(dir, 'state.json'),
+    state = JSON.parse(readFileSync(file, 'utf8'));
+  state.battleEscrows[matchId].createdAt -= 7 * 24 * 3600 + 1;
+  writeFileSync(file, JSON.stringify(state));
+  const closed = await controller.command('close');
+  assert.equal(closed.wallet.reserved, 0);
+  assert.equal(closed.wallet.available, 1000000000);
+  assert.equal(closed.wallet.net, 0);
+  assert.equal(controller.s.phase, 'closed');
+  await controller.shutdown();
 });

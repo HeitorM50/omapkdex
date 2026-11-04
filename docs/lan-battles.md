@@ -110,7 +110,11 @@ once; a conflicting replay is rejected. A reserved stake cannot be spent in the
 Shop or reserved for another match. Prepared offers persist before reservation,
 so recovery can complete the offer after a crash between the two file writes.
 
-Disconnects never auto-refund or auto-award stakes. **Reconnect saved match**
+Disconnects never auto-refund or auto-award stakes. The one exception is explicit:
+if the opponent has not reconnected **7 days** after the reservation,
+**Close / cancel room** voids the stake locally (outcome `void`, battleNet
+unchanged) and frees the room. Before that, closing is refused and says how many
+hours are left. A match voided this way cannot be settled later. **Reconnect saved match**
 uses the pinned peer identity, same seed, locked snapshots and durable turn
 journal; an address or port can be updated if needed. Moves committed before a
 restart remain committed. Result hashes cover the engine state, excluding wall
@@ -119,7 +123,8 @@ a staked room as fully complete.
 
 A pre-start staked cancellation requires both peers, even if only one was ready.
 An active staked match ends by battle, draw or surrender; it cannot be unilaterally
-cancelled for a refund. If a result is saved on only one side, reconnect the same
+cancelled for a refund while the opponent can still return (see the 7-day
+expiry above). If a result is saved on only one side, reconnect the same
 match to finish the idempotent settlement. Old match journals are retained; use
 **Recover** beside a history entry to reopen its saved room/result, coordinating
 with the other player. This also works after another room was created. Close any

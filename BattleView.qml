@@ -65,7 +65,7 @@ Column {
     }
     Text {
       width: parent.width; visible: trust.visible
-      text: "A local save can be changed. Stakes stay reserved after disconnects; reconnect to agree on the result."
+      text: "A local save can be changed. Stakes stay reserved after disconnects; reconnect to agree on the result. After 7 days without the opponent, closing the room releases the stake."
       textFormat: Text.PlainText; wrapMode: Text.WordWrap; color: Commons.Color.urgent; font.family: root.fontFamily; font.pixelSize: Style.font.caption
     }
     BattleButton {

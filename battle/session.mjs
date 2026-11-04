@@ -780,10 +780,17 @@ export class LanSession extends EventEmitter {
   async closeRoom() {
     if (this.peer && this.engine && !this.engine.view().finished)
       throw Error('Finish or surrender before closing the battle');
-    if (this.s?.rules?.stake && this.s.paired && this.s.settled && !this.s.peerSettled)
-      throw Error('Result saved locally. Reconnect to confirm the opponent’s settlement.');
-    if (this.s?.rules?.stake && this.s.paired && !this.s.settled) {
-      if (!this.peer) throw Error('Reconnect to cancel this paired staked room or finish the match.');
+    if (this.s?.rules?.stake && this.s.paired && this.s.settled && !this.s.peerSettled && this.peer)
+      throw Error('Result saved locally. Wait for the opponent to confirm the settlement.');
+    if (this.s?.rules?.stake && this.s.paired && !this.s.settled && !this.peer) {
+      // The opponent is gone. After the wallet TTL the stake is voided locally, so
+      // a friend who never returns cannot lock tokens (or this room) forever.
+      if (this.s.ownOffer) await wallet(this.dir, 'expire', { matchId: this.s.matchId });
+      this.s.cancelled = true;
+      this.s.expired = true;
+      this.s.settled = true;
+      this.s.outcome = 'void';
+    } else if (this.s?.rules?.stake && this.s.paired && !this.s.settled) {
       if (this.engine) throw Error('Finish or surrender before closing a staked match');
       this.s.cancelled = true;
       this.s.phase = 'verifying';
