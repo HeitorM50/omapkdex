@@ -182,6 +182,7 @@ The individuals rather than the species — every creature you raised, newest fi
 The tokens you already burned are currency: your wallet is the lifetime total minus what you have spent.
 
 Super Rare Candy is a Rare reward granting 250M growth without adding wallet tokens.
+Fast Hatch replaces the plain Egg: reserve it for 2× growth throughout the next generation; existing Egg copies keep working.
 
 The Shop sells **Poor (50M), Fancy (200M) and Legendary (500M) packages**. Each contains one reward and shows its rarity; higher tiers improve rare-item odds. Fancy excludes Common items; Legendary excludes Common and Uncommon items. Eggs stay in the Bag; reserve one for the next natural hatch without interrupting your current Pokémon.
 
@@ -462,14 +463,16 @@ transcript scan for up to 15 minutes, so totals can lag by that much.)
 
 ## Trainer and LAN battles
 
-The **Trainer** tab adds a local name/avatar, individual Pokémon selection and
-match history. **Battle** supports Gen 5 1×1 friendly matches or explicit
+The **Trainer** tab adds a local name/avatar, teams of 3 to 6 captured Pokémon, move editing and
+match history. **Battle** supports Gen 5 3v3 friendly matches or explicit
 trusted-friends virtual-token stakes over TLS on the local network, with mDNS
 room discovery and manual IP connection. Existing captured Pokémon and growth
 are preserved; battle HP/PP are temporary.
 
 Install the optional pinned runtime with `node battle/setup.mjs` (Node 22+, npm
-and OpenSSL). Then select a Pokémon in Trainer and create/join a room in Battle.
+and OpenSSL). Then build a team in Trainer and create/join a room in Battle.
+Choose three at team preview; battles use real levels. Practice vs CPU,
+optional turn timers and replay viewing/export are also available.
 Both users compare the pairing code and accept the same rules before starting.
 
 [Setup, rules, privacy and stake recovery](docs/lan-battles.md).

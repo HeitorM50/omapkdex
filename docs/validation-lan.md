@@ -27,13 +27,16 @@ Pokémon próprios capturados; o pacote não contém seu save nem Pokémon de te
 
 ## Roteiro curto
 
-1. Nos dois computadores, abra **Trainer**, salve nome/avatar e selecione seu Pokémon.
-2. No primeiro, abra **Battle**, selecione o IP da interface Wi-Fi, nível 50 e
+1. Nos dois computadores, abra **Trainer**, salve nome/avatar e monte um time de 3 a 6 Pokémon de espécies distintas.
+   Use **Edit moves** para escolher os golpes; confira stats, tipos e efeitos.
+   Valide **Practice vs CPU** antes da partida em rede.
+2. No primeiro, abra **Battle**, selecione o IP da interface Wi-Fi e
    stake **0**, e clique em **Create LAN room**.
 3. No segundo, use **Find LAN rooms**. Se não aparecer, informe o IP e a porta
    exibidos no primeiro computador e clique em **Join address**.
-4. Compare os códigos e confirme nos dois. Aceite as regras nos dois e jogue
-   até o resultado. Confira HP, PP, golpes, histórico e preservação da coleção.
+4. Compare os códigos e confirme nos dois. Aceite as regras nos dois.
+   Escolha três Pokémon no team preview e jogue até o resultado. Confira HP, PP,
+   golpes, trocas voluntárias/forçadas, histórico e preservação da coleção.
 5. Em outra partida amistosa, interrompa e retome a conexão com **Reconnect
    saved match**. O turno deve continuar, sem duplicação.
 6. Se quiser validar apostas, só então crie uma sala com um valor pequeno e
@@ -43,5 +46,7 @@ Pokémon próprios capturados; o pacote não contém seu save nem Pokémon de te
    nem restaure só uma carteira. Resultados antigos podem ser reabertos em
    **Trainer → Recent battles → Recover**, coordenando com o adversário.
 
-Depois dessa validação, a branch pode ser revisada e preparada para o PR.
+Os dois computadores devem usar a mesma versão (protocolo 2). Finalize partidas
+1v1 pendentes antes de atualizar: seus journals antigos não podem ser retomados
+ou reproduzidos pelo novo motor. Confira também timer, replay e exportação do log.
 Detalhes de regras, arquivos e recuperação: [lan-battles.md](lan-battles.md).

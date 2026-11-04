@@ -18,5 +18,5 @@ function dependency(name) {
     }
   }
 }
-export const { Dex, Battle } = dependency('@pkmn/sim');
+export const { Dex, Battle, TeamValidator } = dependency('@pkmn/sim');
 export const { Bonjour } = dependency('bonjour-service');

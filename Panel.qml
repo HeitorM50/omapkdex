@@ -42,14 +42,16 @@ Panel {
     { key: "log", label: "History" },
     { key: "bag", label: "Bag" },
     { key: "shop", label: "Shop" },
-    // Glifo, não palavra: os cinco rótulos já ocupam quase a largura do painel,
-    // e "Settings" empurraria o quinto para fora. Uma engrenagem é a convenção
-    // mais reconhecível que existe para isso.
-    { key: "settings", label: "󰒓" },
     { key: "trainer", label: "Trainer" },
-    { key: "battle", label: "Battle" }
+    { key: "battle", label: "Battle" },
+    // Glifo, não palavra, e por último: a engrenagem é a convenção mais
+    // reconhecível para isso e fecha a linha sem competir com as abas de uso.
+    { key: "settings", label: "󰒓" }
   ]
   property int tab: 0
+  // Altura máxima da área de conteúdo; passando disso a aba rola. A janela nunca passa do que o
+  // conteúdo pede, e Trainer/Battle (time, resumo, campo) ganham um pouco mais de teto.
+  readonly property real viewCap: Style.space(tab === 5 || tab === 6 ? 560 : 460)
 
   function setTab(index) {
     tab = Math.max(0, Math.min(tabs.length - 1, index))
@@ -153,8 +155,10 @@ Panel {
     focusTarget: keyCatcher
     popoutSwitching: root.popoutSwitching
     popoutSwitchClosing: root.popoutSwitchClosing
-    contentWidth: panel.fittedContentWidth(Style.space(340))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(600))
+    // O painel tem sempre a largura da linha de abas (mais o padding do cartão) e
+    // nunca cresce para o conteúdo: o que não cabe na altura rola.
+    contentWidth: panel.fittedContentWidth(tabRow.implicitWidth + panel.verticalContentInset)
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, root.viewCap + Style.space(110))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -179,8 +183,8 @@ Panel {
         spacing: Style.space(10)
 
         // ---------- Abas ----------
-        Flow {
-          width: parent.width
+        Row {
+          id: tabRow
           spacing: Style.space(4)
 
           Repeater {
@@ -193,9 +197,8 @@ Panel {
 
               readonly property bool active: root.tab === index
 
-              // Largura natural, não dividida igualmente. Medido na fonte real
-              // a 10px, os cinco rótulos somam ~293px de chip em 340px de
-              // conteúdo; a divisão igual daria 68px e cortaria "Companion".
+              // Largura natural, não dividida igualmente: "Companion" é bem mais
+              // largo que a engrenagem, e a divisão igual cortaria o rótulo.
               width: label.implicitWidth + Style.space(12)
               height: Style.space(24)
               radius: Style.space(5)
@@ -234,18 +237,36 @@ Panel {
         // As três views são carregadas sob demanda e só a ativa existe: manter
         // a grade do dex viva em segundo plano custaria imagens decodificadas
         // sem ninguém olhando.
-        Loader {
-          id: viewLoader
+        Controls.ScrollView {
+          id: viewScroll
           width: parent.width
-          active: true
-          onLoaded: root.applyPendingProfile()
-          sourceComponent: root.tab === 0 ? companionComponent
-                           : root.tab === 1 ? dexComponent
-                           : root.tab === 2 ? logComponent
-                           : root.tab === 3 ? bagComponent
-                           : root.tab === 4 ? shopComponent
-                           : root.tab === 5 ? settingsComponent
-                           : root.tab === 6 ? trainerComponent : battleComponent
+          height: Math.min(viewHeight, root.viewCap)
+          // Largura fixa (com a faixa da barra reservada): se dependesse da barra estar ou não
+          // visível, o texto refluiria, a altura mudaria e a barra apareceria e sumiria em loop.
+          contentWidth: width - Style.space(10)
+          contentHeight: viewHeight
+          clip: true
+          Controls.ScrollBar.horizontal.policy: Controls.ScrollBar.AlwaysOff
+
+          // A altura vem do que a view pede, nunca da que o Loader lhe devolve: do contrário o
+          // painel ficaria preso na maior altura já vista e não voltaria a encolher.
+          readonly property real viewHeight: viewLoader.item
+                                             ? viewLoader.item.implicitHeight : 0
+
+          Loader {
+            id: viewLoader
+            // Deixa a barra de rolagem fora do conteúdo em vez de por cima da borda dele.
+            width: viewScroll.width - Style.space(10)
+            active: true
+            onLoaded: root.applyPendingProfile()
+            sourceComponent: root.tab === 0 ? companionComponent
+                             : root.tab === 1 ? dexComponent
+                             : root.tab === 2 ? logComponent
+                             : root.tab === 3 ? bagComponent
+                             : root.tab === 4 ? shopComponent
+                             : root.tab === 5 ? trainerComponent
+                             : root.tab === 6 ? battleComponent : settingsComponent
+          }
         }
 
         Text {
@@ -293,6 +314,7 @@ Panel {
       tokensIntoStage: root.host ? root.host.tokensIntoStage : 0
       difficulty: root.host ? root.host.difficulty : 1.0
       growthBoost: root.host ? root.host.growthBoost === true : false
+      growthMultiplier: root.host ? root.host.growthMultiplier || 1 : 1
       foreground: root.contentForeground
       fontFamily: root.fontFamily
       onPinRequested: function (speciesId) { root.pin(speciesId) }
@@ -335,13 +357,7 @@ Panel {
   }
   Component {
     id: battleComponent
-    Controls.ScrollView {
-      width: viewLoader.width
-      height: Math.min(Style.space(480), battleContent.implicitHeight)
-      contentWidth: availableWidth
-      clip: true
-      BattleView { id: battleContent; width: parent.width; host: root.host; foreground: root.contentForeground; fontFamily: root.fontFamily }
-    }
+    BattleView { width: viewLoader.width; host: root.host; foreground: root.contentForeground; fontFamily: root.fontFamily }
   }
 
   Component {

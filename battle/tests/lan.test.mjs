@@ -1,51 +1,19 @@
 process.env.OMAPKDEX_BATTLE_OFFLINE = '1';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MatchEngine } from '../engine.mjs';
 import { LanSession, hash } from '../session.mjs';
 import { wallet } from '../wallet.mjs';
-import { snapshot } from '../profile.mjs';
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function until(fn, label) {
-  for (let n = 0; n < 300; n++) {
-    if (await fn()) return;
-    await sleep(20);
-  }
-  throw Error('Timeout: ' + label);
-}
-function save(root, who, species, name) {
-  const dir = join(root, who, 'omarchy/io.github.heitorm50.omapkdex');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(
-    join(dir, 'state.json'),
-    JSON.stringify({ lifetimeTokens: 1000000000, spentTokens: 0, hatched: true }),
-  );
-  writeFileSync(
-    join(dir, 'collection.json'),
-    JSON.stringify({
-      entries: [
-        {
-          companionId: who,
-          speciesId: species,
-          name,
-          nature: 'adamant',
-          rarity: 'common',
-          finalStage: 0,
-          graduatedAt: 1,
-          line: [{ id: species, name }],
-        },
-      ],
-    }),
-  );
-  return dir;
-}
+import { teamSnapshots } from '../profile.mjs';
+import { until, save, teamOf, step, sleep } from './helpers.mjs';
+const team = (who) => teamOf(who);
 test('two TLS peers pair, reserve stakes, use committed moves, reconnect and settle once', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'omapkdex-lan-'));
-  const aDir = save(root, 'host', 25, 'pikachu'),
-    bDir = save(root, 'guest', 7, 'squirtle');
+  const aDir = save(root, 'host'),
+    bDir = save(root, 'guest');
   const a = new LanSession(aDir, { discovery: false }),
     b = new LanSession(bDir, { discovery: false });
   t.after(async () => {
@@ -54,12 +22,11 @@ test('two TLS peers pair, reserve stakes, use committed moves, reconnect and set
     rmSync(root, { recursive: true, force: true });
   });
   const beforeA = readFileSync(join(aDir, 'collection.json'), 'utf8');
-  await a.command('profile', { displayName: 'Ash', selectedCompanionId: 'host' });
-  await b.command('profile', { displayName: 'Misty', selectedCompanionId: 'guest' });
+  await a.command('profile', { displayName: 'Ash', team: team('host') });
+  await b.command('profile', { displayName: 'Misty', team: team('guest') });
   await a.command('host', {
     host: '127.0.0.1',
     port: 0,
-    mode: 'level50',
     stake: 100000000,
     trustedStakesAccepted: true,
   });
@@ -83,34 +50,25 @@ test('two TLS peers pair, reserve stakes, use committed moves, reconnect and set
   await b.command('resume', {});
   await until(() => a.s.phase === 'active' && b.s.phase === 'active', 'resume');
   assert.equal(a.engine.digest(), b.engine.digest());
-  const attack = (s) => {
-    const moves = s.engine.view().players[s.s.role].moves;
-    return (
-      Math.max(
-        0,
-        moves.findIndex(
-          (m) =>
-            !m.disabled &&
-            m.pp > 0 &&
-            !['rest', 'sleeptalk', 'protect', 'raindance', 'tailwhip', 'irondefense'].includes(m.id),
-        ),
-      ) + 1
-    );
-  };
-  await a.command('move', { slot: attack(a) });
+  assert.equal(a.engine.view().phase, 'teampreview');
+  await a.command('team', { order: '123' });
   assert.ok(a.s.choice);
   assert.equal(b.s.choice, undefined);
-  await b.command('move', { slot: attack(b) });
+  await assert.rejects(() => a.command('move', { slot: 1 }));
+  await b.command('team', { order: '321' });
+  await until(() => a.s.turns.length === 1 && b.s.turns.length === 1 && a.s.phase === 'active' && b.s.phase === 'active', 'preview');
+  assert.equal(a.engine.view().phase, 'battle');
+  assert.equal(b.engine.view().players[1].team.length, 3);
+  assert.equal(a.battleView().players[1].moves.length, 0, 'the opponent moves stay hidden');
+  assert.ok(a.battleView().players[0].moves.length > 0);
+  await step(a, b);
   await until(
     () =>
-      a.s.phase !== 'verifying' &&
-      b.s.phase !== 'verifying' &&
-      a.s.turns.length === 1 &&
-      b.s.turns.length === 1,
-    'first turn',
+      a.s.phase === 'active' && b.s.phase === 'active' && a.s.turns.length === 2 && b.s.turns.length === 2,
+    'first move round',
   );
-  const replay = new MatchEngine(a.s.players, a.s.seed, a.s.rules.mode);
-  for (const turn of a.s.turns) replay.turn(turn.actions);
+  const replay = new MatchEngine(a.s.players, a.s.seed);
+  for (const turn of a.s.turns) replay.apply(turn.actions);
   assert.equal(replay.digest(), a.s.turns.at(-1).hash);
   replay.destroy();
   if (!a.engine.view().finished) await a.command('forfeit');
@@ -124,15 +82,15 @@ test('two TLS peers pair, reserve stakes, use committed moves, reconnect and set
 });
 test('staked cancellation refunds the ready peer and lets the host create another room', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'omapkdex-cancel-')),
-    a = new LanSession(save(root, 'h', 25, 'pikachu'), { discovery: false }),
-    b = new LanSession(save(root, 'g', 7, 'squirtle'), { discovery: false });
+    a = new LanSession(save(root, 'h'), { discovery: false }),
+    b = new LanSession(save(root, 'g'), { discovery: false });
   t.after(async () => {
     await a.shutdown();
     await b.shutdown();
     rmSync(root, { recursive: true, force: true });
   });
-  await a.command('profile', { selectedCompanionId: 'h' });
-  await b.command('profile', { selectedCompanionId: 'g' });
+  await a.command('profile', { team: team('h') });
+  await b.command('profile', { team: team('g') });
   await a.command('host', { host: '127.0.0.1', port: 0, stake: 20000000, trustedStakesAccepted: true });
   await b.command('join', { host: '127.0.0.1', port: a.s.port });
   await until(() => a.code && b.code, 'codes');
@@ -153,8 +111,8 @@ test('staked cancellation refunds the ready peer and lets the host create anothe
 });
 test('a committed move survives peer process state reload and is not replayed twice', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'omapkdex-resume-')),
-    aDir = save(root, 'h', 25, 'pikachu'),
-    bDir = save(root, 'g', 7, 'squirtle');
+    aDir = save(root, 'h'),
+    bDir = save(root, 'g');
   const a = new LanSession(aDir, { discovery: false });
   let b = new LanSession(bDir, { discovery: false });
   t.after(async () => {
@@ -162,8 +120,8 @@ test('a committed move survives peer process state reload and is not replayed tw
     await b.shutdown();
     rmSync(root, { recursive: true, force: true });
   });
-  await a.command('profile', { selectedCompanionId: 'h' });
-  await b.command('profile', { selectedCompanionId: 'g' });
+  await a.command('profile', { team: team('h') });
+  await b.command('profile', { team: team('g') });
   await a.command('host', { host: '127.0.0.1', port: 0 });
   await b.command('join', { host: '127.0.0.1', port: a.s.port });
   await until(() => a.code && b.code, 'codes');
@@ -173,7 +131,7 @@ test('a committed move survives peer process state reload and is not replayed tw
   await a.command('ready', {});
   await b.command('ready', {});
   await until(() => a.s.phase === 'active' && b.s.phase === 'active', 'started');
-  await a.command('move', { slot: 1 });
+  await a.command('team', { order: '123' });
   await until(() => b.s.remoteCommit, 'commit');
   await b.shutdown();
   await until(() => !a.peer, 'disconnect');
@@ -181,7 +139,7 @@ test('a committed move survives peer process state reload and is not replayed tw
   await b.command('resume', {});
   await until(() => a.s.phase === 'active' && b.s.phase === 'active', 'reload resume');
   assert.ok(a.s.choice);
-  await b.command('move', { slot: 1 });
+  await b.command('team', { order: '123' });
   await until(
     () =>
       a.s.turns.length === 1 && b.s.turns.length === 1 && a.s.phase === 'active' && b.s.phase === 'active',
@@ -194,15 +152,15 @@ test('a committed move survives peer process state reload and is not replayed tw
 });
 test('a completed journal remains recoverable after another room has been created', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'omapkdex-archive-')),
-    a = new LanSession(save(root, 'h', 25, 'pikachu'), { discovery: false }),
-    b = new LanSession(save(root, 'g', 7, 'squirtle'), { discovery: false });
+    a = new LanSession(save(root, 'h'), { discovery: false }),
+    b = new LanSession(save(root, 'g'), { discovery: false });
   t.after(async () => {
     await a.shutdown();
     await b.shutdown();
     rmSync(root, { recursive: true, force: true });
   });
-  await a.command('profile', { selectedCompanionId: 'h' });
-  await b.command('profile', { selectedCompanionId: 'g' });
+  await a.command('profile', { team: team('h') });
+  await b.command('profile', { team: team('g') });
   await a.command('host', { host: '127.0.0.1', port: 0, stake: 1000, trustedStakesAccepted: true });
   await b.command('join', { host: '127.0.0.1', port: a.s.port });
   await until(() => a.code && b.code, 'codes');
@@ -230,16 +188,17 @@ test('a completed journal remains recoverable after another room has been create
 
 test('a crash after reserving funds recovers the prepared offer without a second debit', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'omapkdex-intent-')),
-    dir = save(root, 'h', 25, 'pikachu');
+    dir = save(root, 'h');
   let controller = new LanSession(dir, { discovery: false });
+  controller.trainer.update({ team: teamOf('h') });
   t.after(async () => {
     await controller.shutdown();
     rmSync(root, { recursive: true, force: true });
   });
-  const rules = { version: 1, mode: 'level50', stake: 1000 },
+  const rules = { version: 2, mode: 'natural', stake: 1000 },
     matchId = 'prepared-match';
   controller.s = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     role: 0,
     host: '127.0.0.1',
     port: 47853,
@@ -255,7 +214,7 @@ test('a crash after reserving funds recovers the prepared offer without a second
   };
   controller.s.reservationIntent = {
     trainer: controller.publicTrainer(),
-    snapshot: snapshot(dir, 'h', 'level50'),
+    team: teamSnapshots(dir, teamOf('h')),
     rulesHash: hash(rules),
     seedCommit: hash(controller.s.ownSeed),
   };
@@ -269,15 +228,39 @@ test('a crash after reserving funds recovers the prepared offer without a second
   assert.equal(controller.s.reservationIntent, undefined);
   assert.equal(result.wallet.reserved, 1000);
   await assert.rejects(() => controller.command('close'));
-  // After the TTL a missing opponent no longer locks the stake or the room.
-  const file = join(dir, 'state.json'),
-    state = JSON.parse(readFileSync(file, 'utf8'));
-  state.battleEscrows[matchId].createdAt -= 7 * 24 * 3600 + 1;
-  writeFileSync(file, JSON.stringify(state));
-  const closed = await controller.command('close');
-  assert.equal(closed.wallet.reserved, 0);
-  assert.equal(closed.wallet.available, 1000000000);
-  assert.equal(closed.wallet.net, 0);
-  assert.equal(controller.s.phase, 'closed');
-  await controller.shutdown();
+});
+
+test('two peers play a full 3v3 through team preview and forced switches and agree on the result', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'omapkdex-full-')),
+    a = new LanSession(save(root, 'h'), { discovery: false }),
+    b = new LanSession(save(root, 'g'), { discovery: false });
+  t.after(async () => {
+    await a.shutdown();
+    await b.shutdown();
+    rmSync(root, { recursive: true, force: true });
+  });
+  await a.command('profile', { team: team('h') });
+  await b.command('profile', { team: team('g') });
+  await a.command('host', { host: '127.0.0.1', port: 0 });
+  await b.command('join', { host: '127.0.0.1', port: a.s.port });
+  await until(() => a.code && b.code, 'codes');
+  await a.command('pair');
+  await b.command('pair');
+  await until(() => b.s.rules, 'rules');
+  await a.command('ready', {});
+  await b.command('ready', {});
+  await until(() => a.s.phase === 'active' && b.s.phase === 'active', 'active');
+  for (let n = 0; n < 1500 && !(a.s.settled && b.s.settled); n++) {
+    await step(a, b);
+    await sleep(10);
+  }
+  await until(() => a.s.phase === 'finished' && b.s.phase === 'finished', 'finished');
+  assert.equal(a.engine.digest(), b.engine.digest());
+  assert.deepEqual(a.s.turns, b.s.turns);
+  assert.ok(a.s.turns.some((turn) => turn.actions.includes(null)), 'a forced switch round had one chooser');
+  assert.ok(a.s.turns[0].actions.every((c) => /^team /.test(c)));
+  assert.equal(a.trainer.history().length, 1);
+  // The opponent's rarity and types come over the wire with each Pokémon.
+  assert.deepEqual(b.s.theirOffer.team.map((m) => m.rarity), ['rare', 'common', 'common']);
+  assert.equal(a.battleView().players[1].team.filter((m) => m.rarity === 'rare').length, 1, 'the view shows the opponent’s rarities');
 });

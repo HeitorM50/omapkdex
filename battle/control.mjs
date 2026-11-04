@@ -28,7 +28,9 @@ export function request(dir, op, data = {}, timeout = 20000) {
     frames.on('message', (m) => {
       clearTimeout(timer);
       socket.destroy();
-      if (m.error) reject(Error(m.error));
+      // A falha de um comando vem sozinha ({error}); o status completo também
+      // carrega `error` (a última falha da sessão) e continua sendo uma resposta.
+      if (m.error && !m.profile) reject(Error(m.error));
       else resolve(m);
     });
     socket.on('connect', () => frames.send({ op, data }));

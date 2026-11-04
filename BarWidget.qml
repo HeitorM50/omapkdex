@@ -54,7 +54,7 @@ BarWidget {
   BattleAgent {
     id: battleAgent
     pluginDir: root.pluginDir
-    active: root.opened && root.panelLoaderTab >= 6
+    active: root.opened && (root.panelLoaderTab === 5 || root.panelLoaderTab === 6)
   }
   readonly property int panelLoaderTab: panelLoader.item ? panelLoader.item.tab : 0
 
@@ -104,6 +104,8 @@ BarWidget {
     if (!companion || !collection) return false
     return Collection.hasGraduatedLine(collection, companion.baseSpeciesId)
   }
+
+  readonly property real growthMultiplier: Balance.growthMultiplier(progressState, growthBoost)
 
   readonly property real burnRate: progressState ? (progressState.burnRate || 0) : 0
   readonly property string mood: Balance.mood(progressState, todayTokens,
@@ -159,8 +161,8 @@ BarWidget {
   // Pokémon evolui com ela pela metade.
   readonly property var progress: Balance.progress(rarity, totalForms, stage,
                                                    tokensIntoStage, difficulty,
-                                                   growthBoost ? 2 : 1)
-  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty, progressState && progressState.turboIncubatorActive)
+                                                   growthMultiplier)
+  readonly property real hatchThreshold: Balance.hatchThreshold(difficulty, progressState && progressState.turboIncubatorActive, progressState && progressState.fastHatchActive)
 
   readonly property real todayTokens: {
     var total = 0
@@ -713,9 +715,9 @@ BarWidget {
     function log(): void { root.openTab(2) }
     function bag(): void { root.openTab(3) }
     function shop(): void { root.openTab(4) }
-    function settings(): void { root.openTab(5) }
-    function trainer(): void { root.openTab(6) }
-    function battle(): void { root.openTab(7) }
+    function settings(): void { root.openTab(7) }
+    function trainer(): void { root.openTab(5) }
+    function battle(): void { root.openTab(6) }
     function profile(): void { root.openProfile() }
 
     // Perfil de uma espécie qualquer do Pokédex, por número. Serve de atalho

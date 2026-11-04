@@ -572,7 +572,7 @@ def cmd_absorb(argv: list[str]) -> int:
         rarity = (companion or {}).get("rarity", "common")
         line = (companion or {}).get("evolutionLine") or []
         total_forms = max(1, len(line))
-        boost = growth_boost(load_collection(), companion)
+        boost = growth_boost(load_collection(), companion) * (2 if state.get("fastHatchActive") else 1)
 
         # Antes de acumular qualquer token: se a dificuldade mudou desde a
         # última absorção, o progresso guardado está em outra escala.
@@ -992,7 +992,22 @@ def cmd_trade_up(argv: list[str]) -> int:
 
 def effective_hatch_threshold(state: dict, difficulty: float) -> int:
     base = hatch_threshold(difficulty)
-    return max(1, round(base / 2)) if state.get("turboIncubatorActive") else base
+    multiplier = (2 if state.get("turboIncubatorActive") else 1) * (2 if state.get("fastHatchActive") else 1)
+    return max(1, round(base / multiplier))
+
+
+def start_generation_items(state: dict) -> None:
+    """End the old generation's boost and activate reservations for the new one."""
+    state.pop("fastHatchActive", None)
+    fast = state.pop("fastHatchQueued", False)
+    # Old reserved plain Eggs become useful without rewriting any inventory.
+    if state.get("queuedEgg") == "egg:":
+        state.pop("queuedEgg")
+        fast = True
+    if fast:
+        state["fastHatchActive"] = True
+    if state.pop("turboIncubatorQueued", False):
+        state["turboIncubatorActive"] = True
 
 
 def consume_hatch_items(state: dict) -> None:
@@ -1080,8 +1095,7 @@ def advance_stages(state: dict, rarity: str, total_forms: int,
         state["graduations"] = int(state.get("graduations") or 0) + 1
         state["hatched"] = False
         state["stage"] = 0
-        if state.pop("turboIncubatorQueued", False):
-            state["turboIncubatorActive"] = True
+        start_generation_items(state)
         # O excedente é descartado de propósito: carregá-lo faria cascata no
         # caso que importa, em que `seed` solta mais de um bilhão de uma vez e
         # graduaria vários Pokémon em sequência contra uma linha que ainda nem
@@ -1536,6 +1550,9 @@ def cmd_hatch(argv: list[str]) -> int:
         "evolutionLine": line,
         "hatchedAt": now,
     }
+    # A legacy plain Egg can be awaiting delivery after an offline graduation.
+    if not argv and queued == "egg:":
+        state["fastHatchActive"] = True
     write_json(companion_path(), companion)
 
     # Reserve the rolled bonus until the egg actually hatches. Network failure
@@ -1960,6 +1977,7 @@ def cmd_buy(argv: list[str]) -> int:
             # Perder o progresso acumulado é o custo real do re-roll, e é o que
             # impede farmar chocagens.
             state["tokensIntoStage"] = 0
+            start_generation_items(state)
         else:
             if what in PASSIVE_ITEMS:
                 inventory[what] = True
@@ -2004,8 +2022,19 @@ def cmd_use(argv: list[str]) -> int:
     if not argv:
         log("uso: omapkdex-sync use <rareCandy|superRareCandy|mint> <growthDifficulty>")
         return 2
-    what = argv[0]
+    what = "egg:" if argv[0] == "fastHatch" else argv[0]
     difficulty = clamp_difficulty(argv[1] if len(argv) > 1 else DIFFICULTY_DEFAULT)
+
+    if what == "egg:":
+        def reserve_fast_hatch(state):
+            inventory = state.setdefault("inventory", {})
+            if (state.get("fastHatchQueued") or state.get("queuedEgg") == "egg:"
+                    or int(inventory.get(what) or 0) <= 0):
+                return False
+            inventory[what] = int(inventory[what]) - 1
+            state["fastHatchQueued"] = True
+            return True
+        return 0 if _with_state_lock(reserve_fast_hatch) else 1
 
     if what in ("turboIncubator", "luckyClover"):
         flag = "turboIncubatorQueued" if what == "turboIncubator" else "luckyCloverArmed"
@@ -2092,7 +2121,8 @@ def cmd_use(argv: list[str]) -> int:
         # uma máquina de dinheiro, porque a carteira é lifetime − spent.
         # E não é escalado pela dificuldade: escalar os dois se cancelaria.
         state["tokensIntoStage"] = int(state.get("tokensIntoStage") or 0) + CANDY_GROWTH[what]
-        graduated["yes"] = advance_stages(state, rarity, total_forms, difficulty, boost)
+        graduated["yes"] = advance_stages(state, rarity, total_forms, difficulty,
+                                           boost * (2 if state.get("fastHatchActive") else 1))
         return True
 
     def depois():

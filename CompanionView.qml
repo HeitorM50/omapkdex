@@ -32,6 +32,7 @@ Column {
   readonly property real tokensIntoStage: host ? host.tokensIntoStage : 0
   readonly property string currentSprite: host && host.currentSprite ? host.currentSprite : ""
   readonly property bool growthBoost: host ? host.growthBoost === true : false
+  readonly property real growthMultiplier: host ? host.growthMultiplier || (growthBoost ? 2 : 1) : 1
   readonly property string mood: host ? host.mood : "egg"
   readonly property int celebration: host ? host.celebration : 0
   readonly property bool dittoRevealed: host ? host.dittoRevealed === true : false
@@ -235,7 +236,7 @@ Column {
         // A cápsula só aparece quando o bônus está ativo — é informação que
         // explica por que a barra está andando rápido.
         Rectangle {
-          visible: root.growthBoost && root.hatched
+          visible: root.growthMultiplier > 1 && root.hatched
           anchors.verticalCenter: parent.verticalCenter
           width: boostLabel.implicitWidth + Style.space(8)
           height: boostLabel.implicitHeight + Style.space(2)
@@ -246,7 +247,7 @@ Column {
             id: boostLabel
             anchors.centerIn: parent
             textFormat: Text.PlainText
-            text: "2× growth"
+            text: root.growthMultiplier + "× growth"
             color: Color.urgent
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

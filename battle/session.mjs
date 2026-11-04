@@ -1,44 +1,99 @@
 import tls from 'node:tls';
 import { networkInterfaces, homedir } from 'node:os';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { TrainerStore, roster, snapshot, validateSnapshot } from './profile.mjs';
+import { TrainerStore, roster, learnset, teamSnapshots, validateTeam, moveInfo } from './profile.mjs';
 import { ROOT, readJSON, writeJSON, text, integer, id } from './storage.mjs';
 import { identity, Frames, secureOptions, fingerprint, pairCode, localIP, connectTLS } from './wire.mjs';
 import { Discovery } from './discovery.mjs';
-import { MatchEngine } from './engine.mjs';
+import { MatchEngine, CHOICE } from './engine.mjs';
+import { decide, cpuTeam } from './bot.mjs';
 import { wallet } from './wallet.mjs';
 export const hash = (value) =>
   createHash('sha256')
     .update(typeof value === 'string' ? value : JSON.stringify(value))
     .digest('hex');
-const MODES = ['level50', 'natural'];
-const ENGINE = 'gen5-pkmn-0.10.13-v1';
+const MODES = ['natural'];
+const ENGINE = 'gen5-pkmn-0.10.13-v2';
+const PROTOCOL = 2;
+const isTurn = (t) =>
+  t &&
+  Array.isArray(t.actions) &&
+  t.actions.length === 2 &&
+  t.actions.every((a) => a === null || (typeof a === 'string' && CHOICE.test(a))) &&
+  /^[a-f0-9]{64}$/.test(t.hash);
+// A journal that can no longer be resumed (older protocol, or one that stopped
+// replaying) still owns a reserved stake. Keep just enough of it for closeRoom to
+// release that stake through the wallet expiry instead of hiding it forever.
+function lockedStake(s) {
+  if (!s?.rules?.stake || !s.ownOffer || s.settled || typeof s.matchId !== 'string') return null;
+  return {
+    schemaVersion: 2,
+    legacy: true,
+    matchId: s.matchId,
+    role: s.role,
+    rules: s.rules,
+    paired: true,
+    ownOffer: true,
+    phase: 'disconnected',
+    turns: [],
+    forfeits: [false, false],
+    verifiedTurns: 0,
+  };
+}
 export class LanSession extends EventEmitter {
-  constructor(dir, { discovery = true } = {}) {
+  constructor(dir, { discovery = true, rng = Math.random, claimGraceMs = 20000, clockMs = 1000 } = {}) {
     super();
+    this.rng = rng;
+    this.claimGrace = claimGraceMs;
     this.dir = dir;
     this.trainer = new TrainerStore(dir);
     this.keys = identity(dir);
     this.file = join(dir, 'battle-session.json');
+    this.error = '';
     this.s = readJSON(this.file, null);
+    // Matches saved by the 1v1 protocol cannot be replayed by the team engine.
+    if (this.s && this.s.schemaVersion !== 2) {
+      this.s = lockedStake(this.s);
+      if (this.s) this.error = 'A staked match from an older version cannot be resumed. Close the room to release the stake after 7 days.';
+    }
+    // The claim clock only starts once this service is up: time spent with this side
+    // asleep or stopped must not count against an opponent who was never seen late.
+    this.loadedAt = Date.now();
+    this.editing = '';
     this.engine = null;
     this.peer = null;
     this.server = null;
     this.sockets = new Set();
     this.discovery = discovery ? new Discovery() : null;
-    this.error = '';
     this.queue = Promise.resolve();
     this.seq = 0;
     this.received = 0;
     this.sentHash = '';
     this.seedSent = false;
     this.revealSent = '';
-    if (this.s && this.s.phase !== 'finished' && this.s.phase !== 'closed') this.s.phase = 'disconnected';
-    if (this.s?.seed) this.replay();
+    if (this.s && this.s.phase !== 'finished' && this.s.phase !== 'closed')
+      this.s.phase = this.s.practice ? 'active' : 'disconnected';
+    try {
+      if (this.s?.seed) {
+        this.replay();
+        if (this.s.practice) {
+          this.autoBot();
+          this.s.theirOffer?.team?.forEach((m) => this.warmSprite(m));
+        }
+      }
+    } catch (e) {
+      // A journal that no longer replays must not keep the service from starting.
+      this.error = 'The saved battle could not be restored: ' + e.message;
+      this.engine?.destroy();
+      this.engine = null;
+      this.s = lockedStake(this.s);
+    }
+    this.clock = setInterval(() => this.tick(), clockMs);
+    this.clock.unref();
     this.heartbeat = setInterval(() => {
       if (!this.peer) return;
       if (Date.now() - this.lastSeen > 30000) this.peer.close();
@@ -52,7 +107,8 @@ export class LanSession extends EventEmitter {
     return p;
   }
   archive() {
-    if (this.s?.matchId) writeJSON(join(this.dir, 'battle-matches', id(this.s.matchId) + '.json'), this.s);
+    // Practice battles stay in the current session only; they are not a saved history.
+    if (this.s?.matchId && !this.s.practice) writeJSON(join(this.dir, 'battle-matches', id(this.s.matchId) + '.json'), this.s);
   }
   save() {
     if (this.s) {
@@ -72,17 +128,29 @@ export class LanSession extends EventEmitter {
       );
   }
   battleView() {
-    if (!this.engine) return null;
-    const view = this.engine.view(),
+    return this.engine ? this.decorate(this.engine, this.s.role, false) : null;
+  }
+  decorate(engine, role, replay) {
+    const view = engine.view(),
       cache = join(
         process.env.XDG_CACHE_HOME || join(homedir(), '.cache'),
         'omarchy/io.github.heitorm50.omapkdex/sprites',
       );
-    view.players = view.players.map((mon) => {
+    const sprite = (mon) => {
       const base = String(mon.speciesId) + (mon.shiny ? '-shiny' : '');
       const file = ['gif', 'png'].map((ext) => join(cache, base + '.' + ext)).find(existsSync);
-      return { ...mon, sprite: file ? 'file://' + file : '' };
-    });
+      return file ? 'file://' + file : '';
+    };
+    view.round = this.s?.turns.length ?? 0;
+    // Both peers simulate the whole battle, but the UI only shows what the other
+    // side has revealed: their moves and ability stay hidden. A replay shows neither.
+    view.players = view.players.map((mon, i) => ({
+      ...mon,
+      sprite: sprite(mon),
+      team: mon.team.map((m) => ({ ...m, sprite: sprite(m) })),
+      moves: i === role && !replay ? mon.moves : [],
+      ability: i === role ? mon.ability : '',
+    }));
     return view;
   }
   warmSprite(mon) {
@@ -93,10 +161,14 @@ export class LanSession extends EventEmitter {
     execFile(join(ROOT, 'bin/omapkdex-sync'), args, { timeout: 30000 }, () => {});
   }
   async status() {
-    const w = await wallet(this.dir);
+    const w = await wallet(this.dir),
+      profile = this.trainer.get(),
+      list = roster(this.dir);
     return {
-      profile: this.trainer.get(),
-      roster: roster(this.dir).map(({ entry, ...r }) => r),
+      profile,
+      roster: list.map(({ entry, ...r }) => r),
+      team: this.teamStatus(profile, list),
+      editor: this.editor(profile, list),
       stats: this.trainer.stats(),
       history: this.trainer.history().slice(0, 30),
       wallet: {
@@ -104,6 +176,8 @@ export class LanSession extends EventEmitter {
         reserved: Object.values(w.reservations).reduce((s, r) => s + r.amount, 0),
         net: w.net,
       },
+      replay: this.replayView || null,
+      exportedReplay: this.exportedReplay || '',
       interfaces: this.interfaces(),
       rooms: this.discovery?.list() || [],
       discoveryError: this.discovery?.error || '',
@@ -127,15 +201,39 @@ export class LanSession extends EventEmitter {
             outcome: this.s.outcome || null,
             settled: !!this.s.settled,
             pendingStake: !!this.s.rules?.stake && !this.s.settled && !!this.s.ownOffer,
+            practice: !!this.s.practice,
+            timer: this.s.rules?.timer || 0,
+            deadline: this.deadline(),
+            now: Date.now(),
+            claimable: this.claimable(),
           }
         : null,
     };
+  }
+  teamStatus(profile, list) {
+    const members = profile.team
+      .map((t) => {
+        const r = list.find((r) => r.companionId === t.companionId);
+        return r && { companionId: r.companionId, moves: (t.moves || r.moves.map((m) => m.id)).map(moveInfo) };
+      })
+      .filter(Boolean);
+    try {
+      const snaps = teamSnapshots(this.dir, profile.team, list);
+      return { size: snaps.length, ok: true, error: '', members };
+    } catch (e) {
+      return { size: members.length, ok: false, error: e.message, members };
+    }
+  }
+  editor(profile, list) {
+    if (!this.editing || !list.some((r) => r.companionId === this.editing)) return null;
+    return learnset(this.dir, this.editing, profile.team);
   }
   async command(op, data = {}) {
     return this.enqueue(async () => {
       if (op !== 'status') this.error = '';
       await this.recoverReservation();
       if (op === 'profile') this.trainer.update(data);
+      else if (op === 'edit') this.editing = data.companionId ? id(data.companionId) : '';
       else if (op === 'scan') this.discovery?.scan();
       else if (op === 'host') await this.host(data);
       else if (op === 'join') await this.join(data);
@@ -145,13 +243,22 @@ export class LanSession extends EventEmitter {
         this.send('pair', {});
         await this.maybePaired();
       } else if (op === 'ready') await this.ready(data);
-      else if (op === 'move') await this.choose(data.slot);
+      else if (op === 'move') await this.choose('move ' + integer(data.slot, 1, 4));
+      else if (op === 'switch') await this.choose('switch ' + integer(data.slot, 1, 6));
+      else if (op === 'team') await this.choose('team ' + String(data.order));
+      else if (op === 'choose') await this.choose(data.choice);
+      else if (op === 'practice') await this.practice();
+      else if (op === 'claim') await this.claim();
+      else if (op === 'replay') this.watch(data);
+      else if (op === 'export') this.exportLog(data);
       else if (op === 'forfeit') await this.forfeit();
       else if (op === 'resume') await this.resume(data);
       else if (op === 'recover') {
         this.canReplace();
         this.archive();
         const saved = readJSON(join(this.dir, 'battle-matches', id(data.matchId) + '.json'), null);
+        if (saved && saved.schemaVersion !== 2) throw Error('That match was saved by an older version');
+        if (saved?.practice) throw Error('Practice battles cannot be recovered');
         if (!saved || !saved.paired) throw Error('No saved peer for that match');
         await this.resetTransport();
         this.s = saved;
@@ -177,17 +284,17 @@ export class LanSession extends EventEmitter {
     const host =
       data.host || this.interfaces().find((ip) => !ip.startsWith('127.') && ip.includes('.')) || '127.0.0.1';
     if (!this.interfaces().includes(host)) throw Error('Choose one of this computer’s local interfaces');
-    const mode = data.mode || 'level50';
-    if (!MODES.includes(mode)) throw Error('Unknown battle format');
+    const mode = 'natural',
+      timer = integer(data.timer ?? 0, 0, 300);
     const stake = integer(data.stake || 0, 0, 1000000000);
     if (stake && !data.trustedStakesAccepted) throw Error('Accept the trusted-friends stake rules');
     this.s = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       matchId: randomUUID(),
       role: 0,
       host,
       port: integer(data.port ?? 47853, 0, 65535),
-      rules: { version: 1, mode, stake },
+      rules: { version: 2, mode, stake, timer },
       phase: 'waiting',
       turns: [],
       forfeits: [false, false],
@@ -235,7 +342,7 @@ export class LanSession extends EventEmitter {
     if (!localIP(data.host)) throw Error('Enter a local IP address');
     const port = integer(data.port, 1, 65535);
     this.s = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       role: 1,
       host: data.host,
       port,
@@ -307,7 +414,7 @@ export class LanSession extends EventEmitter {
     });
     this.s.phase = this.s.paired ? 'reconnecting' : 'pairing';
     this.send('hello', {
-      protocol: 1,
+      protocol: PROTOCOL,
       engine: ENGINE,
       matchId: this.s.role === 0 ? this.s.matchId : null,
       resume: !!this.s.paired,
@@ -338,7 +445,7 @@ export class LanSession extends EventEmitter {
     const p = m.payload;
     if (m.type === 'hello') {
       if (this.received !== 1) throw Error('Repeated protocol hello');
-      if (p.protocol !== 1 || p.engine !== ENGINE) throw Error('Incompatible battle protocol');
+      if (p.protocol !== PROTOCOL || p.engine !== ENGINE) throw Error('Incompatible battle protocol');
       if (this.s.role === 1) {
         id(p.matchId);
         if (this.s.matchId && this.s.matchId !== p.matchId) throw Error('Different match');
@@ -362,10 +469,10 @@ export class LanSession extends EventEmitter {
     if (m.type === 'pair') return;
     if (m.type === 'offer') await this.acceptOffer(p);
     else if (m.type === 'rules') {
-      if (this.s.role !== 1 || this.s.ownOffer || !MODES.includes(p.mode) || p.version !== 1)
+      if (this.s.role !== 1 || this.s.ownOffer || !MODES.includes(p.mode) || p.version !== 2)
         throw Error('Invalid room rules');
       integer(p.stake, 0, 1000000000);
-      this.s.rules = { version: 1, mode: p.mode, stake: p.stake };
+      this.s.rules = { version: 2, mode: p.mode, stake: p.stake, timer: integer(p.timer ?? 0, 0, 300) };
       this.save();
     } else if (m.type === 'seed') {
       if (
@@ -380,7 +487,12 @@ export class LanSession extends EventEmitter {
       this.s.remoteSeed = p.seed;
       this.startEngine();
     } else if (m.type === 'commit') {
-      if (!this.engine || p.turn !== this.engine.view().turn || !/^[a-f0-9]{64}$/.test(p.hash))
+      if (
+        !this.engine ||
+        p.round !== this.s.turns.length ||
+        !this.engine.needs()[1 - this.s.role] ||
+        !/^[a-f0-9]{64}$/.test(p.hash)
+      )
         throw Error('Invalid turn commitment');
       if (this.s.remoteCommit && this.s.remoteCommit !== p.hash)
         throw Error('Cannot change a committed turn');
@@ -390,14 +502,17 @@ export class LanSession extends EventEmitter {
     } else if (m.type === 'reveal') {
       if (
         !this.engine ||
-        p.turn !== this.engine.view().turn ||
+        p.round !== this.s.turns.length ||
+        !this.engine.needs()[1 - this.s.role] ||
         typeof p.nonce !== 'string' ||
         !/^[a-f0-9]{32}$/.test(p.nonce) ||
-        hash([this.s.matchId, p.turn, p.slot, p.nonce]) !== this.s.remoteCommit
+        typeof p.choice !== 'string' ||
+        !CHOICE.test(p.choice) ||
+        hash([this.s.matchId, p.round, p.choice, p.nonce]) !== this.s.remoteCommit
       )
         throw Error('Invalid revealed turn');
-      integer(p.slot, 1, 4);
-      this.s.remoteChoice = { slot: p.slot, nonce: p.nonce };
+      this.engine.legal(1 - this.s.role, p.choice);
+      this.s.remoteChoice = { choice: p.choice, nonce: p.nonce };
       this.applyTurn();
     } else if (m.type === 'checkpoint') await this.checkpoint(p);
     else if (m.type === 'settled') {
@@ -421,6 +536,8 @@ export class LanSession extends EventEmitter {
       this.s.phase = 'verifying';
       this.save();
       this.sendCheckpoint();
+    } else if (m.type === 'timeout') {
+      this.acceptTimeout(p);
     } else if (m.type === 'cancel') {
       if (this.engine) throw Error('An active battle must end by battle or surrender');
       this.s.cancelled = true;
@@ -460,13 +577,11 @@ export class LanSession extends EventEmitter {
   async ready(data) {
     if (this.s?.phase !== 'lobby' || !this.s.rules || this.s.ownOffer)
       throw Error('Wait for pairing and room rules');
-    const profile = this.trainer.get(),
-      selected = profile.selectedCompanionId;
-    const mon = snapshot(this.dir, selected, this.s.rules.mode),
+    const team = teamSnapshots(this.dir, this.trainer.get().team),
       rulesHash = hash(this.s.rules);
     const offer = {
       trainer: this.publicTrainer(),
-      snapshot: mon,
+      team,
       rulesHash,
       seedCommit: hash(this.s.ownSeed),
     };
@@ -507,13 +622,13 @@ export class LanSession extends EventEmitter {
         displayName: p.trainer.displayName,
         avatarKey: p.trainer.avatarKey,
       },
-      snapshot: validateSnapshot(p.snapshot, this.s.rules.mode),
+      team: validateTeam(p.team),
       rulesHash: p.rulesHash,
       seedCommit: p.seedCommit,
     };
     if (this.s.theirOffer && hash(clean) !== hash(this.s.theirOffer))
-      throw Error('Opponent changed the locked Pokémon');
-    if (!this.s.theirOffer) this.warmSprite(clean.snapshot);
+      throw Error('Opponent changed the locked team');
+    if (!this.s.theirOffer) clean.team.forEach((m) => this.warmSprite(m));
     this.s.theirOffer = clean;
     this.save();
     this.revealSeed();
@@ -534,8 +649,8 @@ export class LanSession extends EventEmitter {
       this.s.seed = [0, 2, 4, 6].map((n) => bytes.readUInt16BE(n));
       this.s.players =
         this.s.role === 0
-          ? [this.s.ownOffer.snapshot, this.s.theirOffer.snapshot]
-          : [this.s.theirOffer.snapshot, this.s.ownOffer.snapshot];
+          ? [this.s.ownOffer.team, this.s.theirOffer.team]
+          : [this.s.theirOffer.team, this.s.ownOffer.team];
     }
     if (!this.engine) this.replay();
     if (this.incomingTurns) {
@@ -548,15 +663,16 @@ export class LanSession extends EventEmitter {
   }
   replay() {
     this.engine?.destroy();
-    this.engine = new MatchEngine(this.s.players, this.s.seed, this.s.rules.mode);
+    this.engine = new MatchEngine(this.s.players, this.s.seed);
     for (const turn of this.s.turns) {
-      this.engine.turn(turn.actions);
+      this.engine.apply(turn.actions);
       if (this.engine.digest() !== turn.hash) throw Error('Saved battle replay does not match');
     }
     if (this.s.forfeits.every(Boolean)) this.engine.battle.tie();
     else if (this.s.forfeits.some(Boolean)) this.engine.forfeit(this.s.forfeits[0] ? 0 : 1);
   }
-  async choose(slot) {
+  async choose(choice) {
+    if (this.s?.practice) return this.choosePractice(choice);
     if (
       !this.peer ||
       !this.engine ||
@@ -566,30 +682,35 @@ export class LanSession extends EventEmitter {
       this.s.verifiedTurns !== this.s.turns.length
     )
       throw Error('Wait for the peer and the next turn');
-    const options = this.engine.view().players[this.s.role].moves,
-      m = options[integer(slot, 1, options.length) - 1];
-    if (m.disabled || (m.pp <= 0 && m.id !== 'struggle')) throw Error('Move unavailable');
-    const turn = this.engine.view().turn,
+    if (!this.engine.needs()[this.s.role]) throw Error('Wait for your opponent to choose');
+    this.engine.legal(this.s.role, choice);
+    const round = this.s.turns.length,
       nonce = randomBytes(16).toString('hex');
-    this.s.choice = { slot, turn, nonce, hash: hash([this.s.matchId, turn, slot, nonce]) };
+    this.s.choice = { round, choice, nonce, hash: hash([this.s.matchId, round, choice, nonce]) };
     this.save();
-    this.send('commit', { turn, hash: this.s.choice.hash });
+    this.send('commit', { round, hash: this.s.choice.hash });
     this.reveal();
   }
   reveal() {
-    if (this.s.choice && this.s.remoteCommit && this.revealSent !== this.s.choice.hash) {
-      this.revealSent = this.s.choice.hash;
-      this.send('reveal', { turn: this.s.choice.turn, slot: this.s.choice.slot, nonce: this.s.choice.nonce });
-      this.applyTurn();
-    }
+    const c = this.s.choice;
+    if (!c || this.revealSent === c.hash) return;
+    // A commitment only matters when the opponent is choosing too.
+    if (this.engine.needs()[1 - this.s.role] && !this.s.remoteCommit) return;
+    this.revealSent = c.hash;
+    this.send('reveal', { round: c.round, choice: c.choice, nonce: c.nonce });
+    this.applyTurn();
   }
   applyTurn() {
-    if (!this.s.choice || !this.s.remoteChoice || this.s.cancelled) return;
-    const actions =
-      this.s.role === 0
-        ? [this.s.choice.slot, this.s.remoteChoice.slot]
-        : [this.s.remoteChoice.slot, this.s.choice.slot];
-    this.engine.turn(actions);
+    if (this.s.cancelled || !this.engine) return;
+    const needs = this.engine.needs(),
+      role = this.s.role;
+    if (!needs[0] && !needs[1]) return;
+    if (needs[role] && (!this.s.choice || this.revealSent !== this.s.choice.hash)) return;
+    if (needs[1 - role] && !this.s.remoteChoice) return;
+    const mine = needs[role] ? this.s.choice.choice : null,
+      theirs = needs[1 - role] ? this.s.remoteChoice.choice : null,
+      actions = role === 0 ? [mine, theirs] : [theirs, mine];
+    this.engine.apply(actions);
     this.s.turns.push({ actions, hash: this.engine.digest() });
     delete this.s.choice;
     delete this.s.remoteChoice;
@@ -611,7 +732,7 @@ export class LanSession extends EventEmitter {
     this.send('checkpoint', { index: this.s.turns.length, hash: digest });
   }
   async checkpoint(p) {
-    if (!Number.isInteger(p.index) || p.index < 0 || p.index > 300 || !/^[a-f0-9]{64}$/.test(p.hash))
+    if (!Number.isInteger(p.index) || p.index < 0 || p.index > 700 || !/^[a-f0-9]{64}$/.test(p.hash))
       throw Error('Invalid checkpoint');
     if (p.index > this.s.turns.length) {
       this.pendingCheckpoint = p;
@@ -630,6 +751,7 @@ export class LanSession extends EventEmitter {
     if (this.s.cancelled || this.engine?.view().finished) await this.finalize();
     else {
       this.s.phase = 'active';
+      this.markRound();
       this.save();
     }
   }
@@ -660,6 +782,12 @@ export class LanSession extends EventEmitter {
     this.send('settled', { hash: this.currentHash() });
   }
   async forfeit() {
+    if (this.s?.practice && this.engine && !this.engine.view().finished) {
+      this.s.forfeits[0] = true;
+      this.replay();
+      this.finishPractice();
+      return;
+    }
     if (!this.peer || !this.engine || this.engine.view().finished)
       throw Error('Reconnect before surrendering');
     this.s.forfeits[this.s.role] = true;
@@ -677,6 +805,7 @@ export class LanSession extends EventEmitter {
       turns: this.s.turns,
       forfeits: this.s.forfeits,
       cancelled: !!this.s.cancelled,
+      timeoutClaim: this.s.timeoutClaim || null,
     });
   }
   async acceptResume(p) {
@@ -691,19 +820,26 @@ export class LanSession extends EventEmitter {
     if (!this.s.rules) {
       if (!MODES.includes(p.rules?.mode)) throw Error('Invalid format');
       integer(p.rules.stake, 0, 1000000000);
+      integer(p.rules.timer ?? 0, 0, 300);
       this.s.rules = p.rules;
+    }
+    // The claim ends the match before this side announces any state of its own
+    // (accepting the offer below already sends a checkpoint).
+    if (p.timeoutClaim) {
+      if (!Array.isArray(p.turns) || p.turns.length !== this.s.turns.length) throw Error('Invalid timeout claim');
+      this.acceptTimeout(p.timeoutClaim);
     }
     if (p.offer) await this.acceptOffer(p.offer);
     if (p.seed) {
       if (!this.s.theirOffer || hash(p.seed) !== this.s.theirOffer.seedCommit) throw Error('Changed seed');
       this.s.remoteSeed = p.seed;
     }
-    if (!Array.isArray(p.turns) || p.turns.length > 300) throw Error('Invalid replay length');
+    if (!Array.isArray(p.turns) || p.turns.length > 700 || !p.turns.every(isTurn)) throw Error('Invalid replay');
     if (
       !Array.isArray(p.forfeits) ||
       p.forfeits.length !== 2 ||
       p.forfeits.some((v) => typeof v !== 'boolean') ||
-      (p.forfeits[this.s.role] && !this.s.forfeits[this.s.role])
+      (p.forfeits[this.s.role] && !this.s.forfeits[this.s.role] && !p.timeoutClaim)
     )
       throw Error('Invalid surrender history');
     this.s.forfeits[1 - this.s.role] ||= p.forfeits[1 - this.s.role];
@@ -712,13 +848,14 @@ export class LanSession extends EventEmitter {
       this.s.cancelled = true;
     }
     this.incomingTurns = p.turns;
+    delete this.s.roundIndex;
     this.startEngine();
     if (this.s.cancelled) {
       this.save();
       this.sendCheckpoint();
     }
-    if (this.s.choice) {
-      this.send('commit', { turn: this.s.choice.turn, hash: this.s.choice.hash });
+    if (this.s.choice && !this.engine?.battle.ended) {
+      this.send('commit', { round: this.s.choice.round, hash: this.s.choice.hash });
       this.reveal();
     }
     if (this.pendingCheckpoint) {
@@ -736,7 +873,7 @@ export class LanSession extends EventEmitter {
     for (let i = 0; i < common; i++)
       if (hash(turns[i]) !== hash(this.s.turns[i])) throw Error('Divergent replay; stake remains pending');
     if (turns.length <= this.s.turns.length) return;
-    if (this.s.choice && turns[this.s.turns.length].actions[this.s.role] !== this.s.choice.slot)
+    if (this.s.choice && turns[this.s.turns.length].actions[this.s.role] !== this.s.choice.choice)
       throw Error('Replay changed your committed move');
     const before = this.s.turns;
     this.s.turns = turns;
@@ -755,6 +892,7 @@ export class LanSession extends EventEmitter {
   }
   async resume(data) {
     if (!this.s || this.peer) throw Error('No disconnected match');
+    if (this.s.legacy) throw Error('This match cannot be resumed; close the room to release its stake after 7 days');
     this.sentHash = '';
     this.s.phase = 'reconnecting';
     this.save();
@@ -807,6 +945,213 @@ export class LanSession extends EventEmitter {
     this.engine?.destroy();
     this.engine = null;
   }
+  // ---- Practice against the CPU: same engine and journal, no network or wallet ----
+  async practice() {
+    this.canReplace();
+    this.archive();
+    await this.resetTransport();
+    const mine = teamSnapshots(this.dir, this.trainer.get().team),
+      level = mine.reduce((sum, m) => sum + m.originalLevel, 0) / mine.length,
+      cpu = cpuTeam(level, this.rng),
+      bytes = randomBytes(8);
+    this.s = {
+      schemaVersion: 2,
+      matchId: randomUUID(),
+      role: 0,
+      practice: true,
+      host: '',
+      port: 0,
+      rules: { version: 2, mode: 'natural', stake: 0, timer: 0 },
+      phase: 'active',
+      paired: true,
+      turns: [],
+      forfeits: [false, false],
+      ownSeed: '0'.repeat(32),
+      verifiedTurns: 0,
+      initialVerified: true,
+      seed: [0, 2, 4, 6].map((n) => bytes.readUInt16BE(n)),
+      players: [mine, cpu],
+      ownOffer: { trainer: this.publicTrainer(), team: mine },
+      theirOffer: {
+        trainer: { trainerId: 'cpu', displayName: 'CPU Trainer', avatarKey: 'pokeball' },
+        team: cpu,
+      },
+    };
+    this.replay();
+    this.save();
+    // The CPU's species are rarely in the sprite cache; fetch them like an opponent's.
+    cpu.forEach((m) => this.warmSprite(m));
+    this.autoBot();
+  }
+  async choosePractice(choice) {
+    if (this.s.phase !== 'active' || !this.engine || this.engine.battle.ended) throw Error('The battle is over');
+    const needs = this.engine.needs();
+    if (!needs[0]) throw Error('Wait for the CPU');
+    this.engine.legal(0, choice);
+    this.applyPractice([choice, needs[1] ? decide(this.engine, 1, this.rng) : null]);
+    this.autoBot();
+  }
+  applyPractice(actions) {
+    this.engine.apply(actions);
+    this.s.turns.push({ actions, hash: this.engine.digest() });
+    this.s.verifiedTurns = this.s.turns.length;
+    if (this.engine.battle.ended) this.finishPractice();
+    else this.save();
+  }
+  // Rounds where only the CPU chooses (its replacement after a faint) play themselves.
+  autoBot() {
+    while (this.engine && !this.engine.battle.ended) {
+      const needs = this.engine.needs();
+      if (needs[0] || !needs[1]) return;
+      this.applyPractice([null, decide(this.engine, 1, this.rng)]);
+    }
+  }
+  finishPractice() {
+    const winner = this.engine.view().winner;
+    this.s.outcome = winner === 0 ? 'win' : winner === 1 ? 'loss' : 'draw';
+    this.s.settled = true;
+    this.s.phase = 'finished';
+    this.save();
+  }
+  // ---- Turn timer: choose in time or the simulator's default is played for you ----
+  markRound() {
+    if (this.s.roundIndex !== this.s.turns.length) {
+      this.s.roundIndex = this.s.turns.length;
+      this.s.roundAt = Date.now();
+    }
+  }
+  deadline() {
+    const s = this.s;
+    return s?.rules?.timer && s.roundAt && s.phase === 'active' ? s.roundAt + s.rules.timer * 1000 : 0;
+  }
+  claimable() {
+    const s = this.s;
+    if (!s || s.practice || s.cancelled || !s.roundAt || !s.rules?.timer || !this.engine || this.engine.battle.ended)
+      return false;
+    const needs = this.engine.needs();
+    return (
+      needs[1 - s.role] &&
+      // An opponent that already committed did choose in time, and one that never
+      // confirmed the previous turn may still be waiting for our reveal: either way a
+      // claim would let a side that saw the opponent's choice walk away with the stake.
+      !s.remoteCommit &&
+      s.verifiedTurns === s.turns.length &&
+      (!needs[s.role] || !!s.choice) &&
+      Date.now() > Math.max(s.roundAt, this.loadedAt) + s.rules.timer * 1000 + this.claimGrace
+    );
+  }
+  tick() {
+    const s = this.s;
+    if (!s || s.practice || !s.rules?.timer || s.phase !== 'active' || !this.engine || this.autoPicking) return;
+    if (s.choice || s.verifiedTurns !== s.turns.length || this.engine.battle.ended || !s.roundAt) return;
+    if (!this.engine.needs()[s.role] || Date.now() < s.roundAt + s.rules.timer * 1000) return;
+    this.autoPicking = true;
+    this.enqueue(() => this.choose(this.engine.defaultChoice(s.role)))
+      .catch((e) => this.fail(e))
+      .finally(() => {
+        this.autoPicking = false;
+      });
+  }
+  // The opponent never chose and is gone (or too slow): after the timer plus a grace
+  // period, the waiting side can end the match. The other peer verifies the claim when
+  // it is connected again, against its own record of the round.
+  async claim() {
+    const s = this.s;
+    if (!this.claimable()) throw Error('Your opponent still has time to choose');
+    s.forfeits[1 - s.role] = true;
+    s.timeoutClaim = { round: s.turns.length };
+    // The round is void: a half-played commitment must not be announced again.
+    delete s.choice;
+    delete s.remoteChoice;
+    delete s.remoteCommit;
+    this.replay();
+    s.phase = 'verifying';
+    this.save();
+    this.send('timeout', { round: s.timeoutClaim.round });
+    this.sendCheckpoint();
+    if (!this.peer) await this.finalize();
+  }
+  acceptTimeout(p) {
+    const s = this.s;
+    if (
+      !this.engine ||
+      !s.rules?.timer ||
+      !Number.isSafeInteger(p?.round) ||
+      p.round !== s.turns.length ||
+      !this.engine.needs()[s.role] ||
+      s.choice
+    )
+      throw Error('Invalid timeout claim');
+    // A connected peer can only claim once this side's own clock has run out too.
+    if (this.peer && Date.now() < (s.roundAt || 0) + s.rules.timer * 1000) throw Error('Timeout claimed too early');
+    s.forfeits[s.role] = true;
+    this.replay();
+    s.phase = 'verifying';
+    this.save();
+    this.sendCheckpoint();
+  }
+  // ---- Replays: step through a saved journal, or export its log ----
+  journal(matchId) {
+    const saved =
+      this.s?.matchId === matchId ? this.s : readJSON(join(this.dir, 'battle-matches', matchId + '.json'), null);
+    if (!saved || saved.schemaVersion !== 2 || !saved.seed || !saved.players) throw Error('That match cannot be replayed');
+    return saved;
+  }
+  rebuild(journal, step) {
+    const engine = new MatchEngine(journal.players, journal.seed),
+      total = journal.turns.length,
+      n = Math.max(0, Math.min(total, step));
+    try {
+      for (let i = 0; i < n; i++) engine.apply(journal.turns[i].actions);
+      if (n === total) {
+        if (journal.forfeits.every(Boolean)) engine.battle.tie();
+        else if (journal.forfeits.some(Boolean)) engine.forfeit(journal.forfeits[0] ? 0 : 1);
+      }
+    } catch (e) {
+      engine.destroy();
+      throw Error('That match cannot be replayed');
+    }
+    return { engine, n, total };
+  }
+  names(journal) {
+    const own = journal.ownOffer?.trainer?.displayName || 'You',
+      theirs = journal.theirOffer?.trainer?.displayName || 'Opponent';
+    return journal.role === 0 ? [own, theirs] : [theirs, own];
+  }
+  watch(data) {
+    if (!data.matchId) {
+      this.replayView = null;
+      return;
+    }
+    const journal = this.journal(id(data.matchId)),
+      { engine, n, total } = this.rebuild(journal, data.step === undefined ? 0 : Math.max(0, Math.min(1000, Math.trunc(Number(data.step)) || 0)));
+    this.replayView = {
+      matchId: journal.matchId,
+      step: n,
+      total,
+      role: journal.role,
+      names: this.names(journal),
+      outcome: journal.outcome || '',
+      battle: this.decorate(engine, journal.role, true),
+    };
+    engine.destroy();
+  }
+  // Writes the public battle log in the Showdown protocol format, with trainer names.
+  exportLog(data) {
+    const journal = this.journal(id(data.matchId)),
+      { engine } = this.rebuild(journal, journal.turns.length),
+      names = this.names(journal).map((n) => n.replace(/[|\n\r]/g, ' '));
+    const lines = engine
+      .log(0)
+      .map((l) => l.replace(/^\|player\|(p[12])\|Player [12]\|/, (m, side) => '|player|' + side + '|' + names[side === 'p1' ? 0 : 1] + '|'));
+    engine.destroy();
+    const dir = join(this.dir, 'battle-replays');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const file = join(dir, id(journal.matchId) + '.log');
+    writeFileSync(file, lines.join('\n') + '\n', { mode: 0o600 });
+    chmodSync(file, 0o600);
+    this.exportedReplay = file;
+  }
   async resetTransport() {
     const peer = this.peer;
     this.peer = null;
@@ -823,6 +1168,7 @@ export class LanSession extends EventEmitter {
   }
   async shutdown() {
     clearInterval(this.heartbeat);
+    clearInterval(this.clock);
     if (this.s && !['finished', 'closed'].includes(this.s.phase)) {
       this.s.phase = 'disconnected';
       this.save();

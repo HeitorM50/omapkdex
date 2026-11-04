@@ -62,9 +62,13 @@ function phaseThreshold(rarity, totalForms, stageIndex, difficulty, growthMultip
 }
 
 // Limiar do ovo, também sujeito à dificuldade.
-function hatchThreshold(difficulty, turboActive) {
+function growthMultiplier(state, repeatedLine) {
+  return (repeatedLine ? 2 : 1) * (state && state.fastHatchActive ? 2 : 1)
+}
+
+function hatchThreshold(difficulty, turboActive, fastActive) {
   var base = Math.max(1, Math.round(EGG_HATCH_THRESHOLD * clampDifficulty(difficulty)))
-  return turboActive ? Math.max(1, Math.round(base / 2)) : base
+  return Math.max(1, Math.round(base / ((turboActive ? 2 : 1) * (fastActive ? 2 : 1))))
 }
 
 // Progresso dentro do estágio atual, dados os tokens acumulados desde que o
@@ -202,7 +206,7 @@ function itemLabel(key) {
     case "superRareCandy": return "Super Rare Candy"
     case "mint": return "Mint"
     case "shinyCharm": return "Shiny Charm"
-    case "egg:": return "Egg"
+    case "egg:": return "Fast Hatch"
     case "egg:uncommon": return "Uncommon Egg"
     case "egg:rare": return "Rare Egg"
     case "egg:legendary": return "Legendary Egg"
@@ -214,6 +218,7 @@ function itemGlyph(key) {
   switch (key) {
     case "turboIncubator": return "⚡"
     case "luckyClover": return "🍀"
+    case "egg:": return "⏩"
     case "superRareCandy": return "🍭"
     case "rareCandy": return "🍬"
     case "mint": return "🌿"
@@ -230,7 +235,7 @@ function itemHint(key) {
     case "superRareCandy": return "+" + formatTokens(250000000) + " of growth"
     case "mint": return "rerolls its nature"
     case "shinyCharm": return "shiny odds 1/64 → 1/48, forever"
-    case "egg:": return "reserve for the next natural hatch"
+    case "egg:": return "2× growth for the next generation, from egg to graduation"
     case "egg:uncommon": return "guarantees Uncommon or better"
     case "egg:rare": return "guarantees Rare or better"
     case "egg:legendary": return "guarantees a Legendary Pokémon at the next natural hatch"
@@ -287,7 +292,7 @@ function bagEntries(inventory) {
       var n = Number(inv[key]) || 0
       if (n <= 0) continue
       rows.push({ key: key, label: itemLabel(key), hint: itemHint(key),
-                  glyph: itemGlyph(key), rarity: itemRarity(key), isEgg: key.indexOf("egg:") === 0, count: n, passive: false,
+                  glyph: itemGlyph(key), rarity: itemRarity(key), isEgg: key !== "egg:" && key.indexOf("egg:") === 0, count: n, passive: false,
                   usable: true })
     }
   }
@@ -370,6 +375,39 @@ function rarityColor(rarity, fallback) {
     case "uncommon": return "#4cc76a"
     default: return fallback
   }
+}
+
+// Cores dos tipos da Gen 5 (a paleta clássica dos jogos). Tipo desconhecido
+// cai num cinza neutro em vez de sumir.
+function typeColor(type) {
+  switch (String(type || "").toLowerCase()) {
+    case "normal": return "#a8a878"
+    case "fire": return "#f08030"
+    case "water": return "#6890f0"
+    case "electric": return "#f8d030"
+    case "grass": return "#78c850"
+    case "ice": return "#98d8d8"
+    case "fighting": return "#c03028"
+    case "poison": return "#a040a0"
+    case "ground": return "#e0c068"
+    case "flying": return "#a890f0"
+    case "psychic": return "#f85888"
+    case "bug": return "#a8b820"
+    case "rock": return "#b8a038"
+    case "ghost": return "#705898"
+    case "dragon": return "#7038f8"
+    case "dark": return "#705848"
+    case "steel": return "#b8b8d0"
+    default: return "#808080"
+  }
+}
+
+// "×2", "×½"... — o multiplicador de dano sofrido, como a Pokédex mostra.
+function multiplierLabel(mult) {
+  if (mult === 0) return "×0"
+  if (mult === 0.25) return "×¼"
+  if (mult === 0.5) return "×½"
+  return "×" + mult
 }
 
 // Nome da espécie como a PokéAPI devolve ("mr-mime") virando exibível.

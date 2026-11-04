@@ -19,7 +19,7 @@ from Poor to Fancy to Legendary. An owned Shiny Charm stays eligible.
 | Mint | Common | 60.94% | Excluded | Excluded |
 | Rare Candy | Uncommon | 12.19% | 20.39% | Excluded |
 | Turbo Incubator | Uncommon | 8.13% | 16.65% | Excluded |
-| Egg | Rare | 6.09% | 14.42% | 18.38% |
+| Fast Hatch | Rare | 6.09% | 14.42% | 18.38% |
 | Super Rare Candy | Rare | 4.88% | 12.90% | 17.38% |
 | Uncommon Egg | Rare | 2.44% | 9.12% | 14.61% |
 | Lucky Clover | Rare | 2.03% | 8.33% | 13.96% |
@@ -43,7 +43,7 @@ Eggs stay in the Bag. “Reserve” consumes one into queuedEgg, preserving all 
 growth. Only one egg can be reserved at a time. The next natural species selection
 uses its guarantee and clears the reservation after successful sprite hydration;
 a failed network request keeps the reservation. An existing eggTier guarantee is
-respected if stronger. A plain egg uses the ordinary pool.
+respected if stronger. The former plain Egg is now Fast Hatch (see below).
 
 Shiny Charm remains a permanent boolean for compatibility; repeated charms add
 shinyCharmDuplicates. They remain collectible but do not multiply the passive bonus.
@@ -129,3 +129,22 @@ It does not increase lifetimeTokens or the spendable wallet. Its reference
 price is 1.25B (2.5 times Rare Candy), and it is eligible in all three packages
 and as a Rare input/output in trade ups. Missing inventory fields in old saves
 default to zero; no save migration is required.
+
+## Fast Hatch (replaces the plain Egg)
+
+Reserve **Fast Hatch** from the Bag to double growth for the **next generation**,
+from incubation through all evolution stages until graduation. Reserving it does
+not affect the current Pokémon or its progress. It stacks multiplicatively with
+the existing repeated-line growth bonus (2× becomes 4×) and with Turbo Incubator
+for incubation (both together divide the egg threshold by four). It does not
+increase lifetime tokens, the wallet or package RNGesus progress.
+
+One can be queued at a time; while a bonus is active, another can be reserved
+for the following generation. The active bonus expires at graduation unless a
+new copy was queued. A failed species/sprite fetch keeps the generation bonus.
+
+Fast Hatch keeps the former Egg's Rare rarity, 1B reference weight and inventory
+key `egg:`. Existing copies and trade-up contracts therefore remain compatible
+without a save rewrite. Old `queuedEgg: "egg:"` reservations become the same
+next-generation bonus. Special eggs keep their rarity guarantees and can be
+reserved alongside Fast Hatch. `use fastHatch` is an alias for `use egg:`.

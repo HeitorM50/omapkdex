@@ -1,7 +1,7 @@
 # Trainer profiles and LAN battles
 
-This branch implements local trainer profiles, Pokémon selection and Gen 5
-1×1 battles between two Omarchy installations. Friendly battles use no tokens;
+This branch implements local trainer profiles, teams and Gen 5 3v3 battles
+(each player brings 3 of a team of up to 6) between two Omarchy installations. Friendly battles use no tokens;
 optional stakes use the plugin's virtual wallet, never provider credits or real money.
 
 ## Install the optional battle runtime
@@ -14,7 +14,7 @@ checkout, run:
 node battle/setup.mjs
 ```
 
-Or click **Install / repair battle runtime** in Trainer. The installer uses the
+Or enable **Battle system** in Trainer; it installs the runtime when needed. The installer uses the
 committed lockfile and `npm ci --ignore-scripts --omit=optional`; dependencies
 live under `$XDG_CACHE_HOME/omarchy/io.github.heitorm50.omapkdex/battle-runtime`
 (or `~/.cache/...`), outside the hot-reloaded plugin directory. No dependency
@@ -31,11 +31,14 @@ THIRD_PARTY_NOTICES.md for exact dependency identities and licensing.
 ## Start a battle
 
 1. On both computers, open **Trainer**, set a display name and local ball avatar,
-   and select an individual Pokémon. Selection uses companionId, independently
-   of the pinned bar sprite. Different individuals of the same species remain
-   selectable. Eggs, released individuals and unrevealed Ditto are ineligible.
+   and build a team of 3 to 6 individual Pokémon (the numbered circle adds or
+   removes one). Teams use companionId, independently of the pinned bar sprite;
+   one Pokémon per species (Species Clause). Eggs, released individuals and
+   unrevealed Ditto are ineligible. **Edit moves** chooses 1 to 4 moves from what
+   the Pokémon would have learned by its level (Gen 5 level-up moves, including
+   its pre-evolutions); OHKO moves, Double Team and Minimize are not offered.
 2. On the host, open **Battle** and select the LAN interface and port (default
-   47853). Choose level 50 or real level. Leave stake at zero for a friendly
+   47853). Battles always use real levels. Leave stake at zero for a friendly
    match; a nonzero stake requires accepting the trusted-friends notice.
 3. Click **Create LAN room**. On the other computer, use **Find LAN rooms**, or
    enter the host's local IP and port manually. This does not scan the network.
@@ -62,15 +65,27 @@ helper. It refuses to discard an unresolved staked match.
 
 ## Pokémon and rules
 
-Snapshots are frozen at readiness: reached species, deterministic IVs, nature,
-ability, gender, shiny flag, Gen 5 level-up moves and level. The existing
-Profile.js and Collection.js projections provide identity, level and IV rules.
-The battle data layer is Gen 5; this can differ from modern base stats displayed
-in PokéAPI species details. Level-50 mode changes only the battle snapshot's
-level; real-level mode retains the individual's growth-derived level. EVs are
-zero and held items are absent. Each side has one Pokémon; no team switching,
-Mega Evolution or Dynamax. The selected Pokémon's collection record is not
-modified by battle damage, surrender or results.
+Teams are frozen at readiness: reached species, deterministic IVs, nature,
+ability, gender, shiny flag, level and the chosen moves (default: the last four
+level-up moves). The existing Profile.js and Collection.js projections provide
+identity, level and IV rules. The battle data layer is Gen 5; this can differ
+from modern base stats shown in PokéAPI species details. Battles use the
+individual's growth-derived level; EVs are zero and held items are absent. No
+Mega Evolution or Dynamax. Collection records are not modified by battle
+damage, surrender or results.
+
+Format: `[Gen 5] Custom Game` with Team Preview, Picked Team Size = 3, Species
+Clause, Sleep Clause Mod, OHKO Clause, Evasion Moves Clause and Endless Battle
+Clause. At team preview both players see the other's six and pick three in
+order; the first leads. Each decision point is a *round*: both sides choose
+(`team 123`, `move 2`, `switch 3`) at preview and on a normal turn, only the
+owner of a fainted Pokémon chooses a replacement. Choices are committed and
+revealed together whenever both sides choose. Both clients simulate the whole
+battle, so each holds the other's full team; the UI shows only what has been
+revealed, which fits the trusted-friends model but is not anti-cheat.
+
+Protocol 2 replaces the 1×1 protocol: peers on the older version are rejected
+and matches saved by it cannot be resumed.
 
 The full generation engine resolves mechanics. Both sides use the same pinned
 runtime and protocol. A battle ends by knockout, surrender, engine tie, or the
@@ -82,6 +97,33 @@ Sprites use the existing local cache, including shiny GIFs. A paired, validated
 opponent species can trigger the existing allowlisted sprite downloader. Missing
 images remain a local placeholder while fetching; battle simulation and wallet
 operations do not depend on that download succeeding.
+
+## Practice, timer and replays
+
+**Practice vs CPU** plays a full 3v3 locally, with no network, wallet or history
+entry. The CPU builds a team of five Gen 5 Pokémon at your team's average level
+(fully evolved, no legendaries, default moves), picks three at preview and chooses
+moves by expected damage (type effectiveness, STAB, accuracy), switching out when
+clearly outmatched. It uses the same engine and journal, so a practice battle
+survives a restart.
+
+**Turn timer** (Options when creating a room: off, 30 s, 60 s, 2 min, 3 min; part
+of the agreed rules). When your time runs out the simulator's default choice is
+played for you (first usable move, first healthy replacement, the first three at
+preview). If the opponent never chooses and is gone, after the timer plus a short
+grace period the waiting player can **claim the win**. The claim is stored in the
+journal and verified by the other peer when it reconnects (same round, and that
+peer had not chosen); it is refused while the other side can still choose. A claim
+is also refused when the opponent already committed its choice for the round, or
+has not confirmed the previous turn yet, and the claim clock restarts when this
+side's battle service starts, so time spent asleep or stopped never counts against
+the opponent. This is a courtesy between friends, not anti-cheat.
+
+**Replays:** after a match, **Watch replay** steps through the saved journal round
+by round (« Start, ‹ Prev, Next ›, End »); Trainer → Recent battles also has a
+**Replay** button. **Save replay log** writes the public battle log in the
+Showdown protocol format to `battle-replays/<matchId>.log` with the trainers'
+names. Old 1v1 journals cannot be replayed.
 
 ## Stakes: trusted friends, with durable recovery
 
@@ -110,11 +152,8 @@ once; a conflicting replay is rejected. A reserved stake cannot be spent in the
 Shop or reserved for another match. Prepared offers persist before reservation,
 so recovery can complete the offer after a crash between the two file writes.
 
-Disconnects never auto-refund or auto-award stakes. The one exception is explicit:
-if the opponent has not reconnected **7 days** after the reservation,
-**Close / cancel room** voids the stake locally (outcome `void`, battleNet
-unchanged) and frees the room. Before that, closing is refused and says how many
-hours are left. A match voided this way cannot be settled later. **Reconnect saved match**
+Disconnects never auto-refund stakes, and award them only through the timeout
+claim above. **Reconnect saved match**
 uses the pinned peer identity, same seed, locked snapshots and durable turn
 journal; an address or port can be updated if needed. Moves committed before a
 restart remain committed. Result hashes cover the engine state, excluding wall
@@ -123,20 +162,23 @@ a staked room as fully complete.
 
 A pre-start staked cancellation requires both peers, even if only one was ready.
 An active staked match ends by battle, draw or surrender; it cannot be unilaterally
-cancelled for a refund while the opponent can still return (see the 7-day
-expiry above). If a result is saved on only one side, reconnect the same
+cancelled for a refund. If a result is saved on only one side, reconnect the same
 match to finish the idempotent settlement. Old match journals are retained; use
 **Recover** beside a history entry to reopen its saved room/result, coordinating
 with the other player. This also works after another room was created. Close any
 current room first. Neither peer should delete the journal or restore only one
-wallet while a stake is pending.
+wallet while a stake is pending. If the opponent never returns, closing the
+disconnected room seven days after the reservation voids the local stake without
+minting tokens; before that deadline it refuses and says how many hours are left.
+A staked match saved by the older 1v1 protocol, or one that no longer replays,
+keeps its reservation visible and follows the same seven-day release.
 
 ## Local data and privacy
 
 Existing state, collection, companion IDs, inventory, Pokédex and growth are not
 reset. Additional files in the plugin's state directory:
 
-- `trainer.json`: local identity, display name, avatar and selected companionId.
+- `trainer.json`: local identity, display name, avatar and team members/move selections.
 - `battle-session.json` and `battle-matches/<matchId>.json`: current and archived
   recovery journals, snapshots, commitments and outcomes.
 - `battle-history.json`: idempotent finalized results for trainer stats.
